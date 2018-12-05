@@ -1,5 +1,3 @@
-require(tidyverse)
-
 #{{{ old interprosan GO output
 if (FALSE) {
     fg = '/home/springer/zhoux379/data/genome/Zmays_v4/61.interpro/15.tsv'
@@ -15,15 +13,25 @@ if (FALSE) {
 }
 #}}}
 
-fgo = '~/data/genome/B73/61_functional/01.go.tsv'
-tgo = read_tsv(fgo)
-unique(tgo$ctag)
-gids_all = unique(tgo$gid)
-tgo_ipr = tgo %>% filter(ctag == 'Interproscan5') %>% select(-ctag)
-tgo_uni = tgo %>% filter(ctag == 'uniprot.plants') %>% select(-ctag)
-tgo_ath = tgo %>% filter(ctag == 'arabidopsis') %>% select(-ctag)
-tgo_arg = tgo %>% filter(ctag == 'argot2.5') %>% select(-ctag)
+#' Read GO annotation for B73 AGP_v4
+#'
+#' @export
+get_go <- function(fgo = '~/data/genome/B73/61_functional/01.go.tsv') {
+    #{{{
+    tgo = read_tsv(fgo)
+    unique(tgo$ctag)
+    gids_all = unique(tgo$gid)
+    tgo_ipr = tgo %>% filter(ctag == 'Interproscan5') %>% select(-ctag)
+    tgo_uni = tgo %>% filter(ctag == 'uniprot.plants') %>% select(-ctag)
+    tgo_ath = tgo %>% filter(ctag == 'arabidopsis') %>% select(-ctag)
+    tgo_arg = tgo %>% filter(ctag == 'argot2.5') %>% select(-ctag)
+    list(go=tgo, ipr=tgo_ipr, uni=tgo_uni, ath=tgo_ath, arg=tgo_arg)
+    #}}}
+}
 
+#' Perform GO enrichment analysis using hypergeometric test
+#'
+#' @export
 go_enrich <- function(gids, tg) {
     #{{{
     tgn = tg %>% distinct(goid, goname, gotype, level)
@@ -52,6 +60,9 @@ go_enrich <- function(gids, tg) {
     #}}}
 }
 
+#' Perform GO enrichment analysis using hypergeometric test
+#'
+#' @export
 go_enrich_gosets <- function(gids, tgo. = tgo, pval.cutoff = 0.05,
                              srcs = c("uniprot.plants", "arabidopsis", "corncyc", "tfdb", "Interproscan5")) {
     #{{{
@@ -68,6 +79,9 @@ go_enrich_gosets <- function(gids, tgo. = tgo, pval.cutoff = 0.05,
     #}}}
 }
 
+#' Perform GO enrichment analysis using hypergeometric test
+#'
+#' @export
 go_enrich_genesets <- function(tgs, pval.cutoff = 0.05) {
     #{{{
     te = tibble()

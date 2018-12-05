@@ -1,22 +1,30 @@
+#' Read SRA run table, format to tibble
+#'
+#' @export
 read_sra_run <- function(fi, fi2) {
     #{{{
     ti0 = read_csv(fi)
-    ti = ti0 %>% select(Run, spots, spots_with_mates, avgLength, 
-                        LibraryName, LibraryLayout, SampleName, 
+    ti = ti0 %>% select(Run, spots, spots_with_mates, avgLength,
+                        LibraryName, LibraryLayout, SampleName,
                         BioSample, Sample, Experiment) %>%
         mutate(paired = ifelse(spots_with_mates/spots >= .5, T, F)) %>%
         print(width = Inf)
     ti %>% count(LibraryLayout, paired) %>% print(n=5)
     if(file.exists(fi2)) {
         ti2 = read_csv(fi2) %>%
-            transmute(Experiment = `Experiment Accession`, 
-                      Title = `Experiment Title`)
+            transmute(Experiment = `Experiment Accession`,
+                      Title = `Experiment Title`,
+                      Title2 = `Study Title`
+            )
         ti = ti %>% left_join(ti2, by = 'Experiment') %>% select(-Experiment)
     }
     ti
     #}}}
 }
 
+#' Fill in 'Replicate' column of a sample table
+#'
+#' @export
 sra_fill_replicate <- function(th) {
     #{{{
     cmap = c()

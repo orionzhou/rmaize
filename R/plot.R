@@ -1,12 +1,45 @@
-require(tidyverse)
-require(ggsci)
-shapes = c(15:18, 0:4, 7:13)
-cols23 = c(pal_ucscgb()(23)[c(1:11,13:23)], pal_uchicago()(6))
-cols23 = c(pal_igv()(23))
-cols13 = c(pal_igv()(13))
-cols12 = pal_futurama()(12)
-cols10 = pal_aaas()(10)
+#' Generate a shape palette (<=15)
+#'
+#' @export
+pal_shapes <- function(n=15) {
+    #{{{
+    shapes = c(15:18, 0:4, 7:13)
+    if(n <= 15) {
+        shapes[1:n]
+    } else {
+        stop(sprintf("error: >15 shapes not allowed\n"))
+    }
+    #}}}
+}
 
+#' Generate a color palette (n=23)
+#'
+#' @export
+pal_23 <- function() c(pal_ucscgb()(23)[c(1:11,13:23)], pal_uchicago()(6))
+
+#' Generate a color palette (n=23)
+#'
+#' @export
+pal_23b <- function() c(pal_igv()(23))
+
+#' Generate a color palette (n=13)
+#'
+#' @export
+pal_13 <- function() c(pal_igv()(13))
+
+#' Generate a color palette (n=12)
+#'
+#' @export
+pal_12 <- function() pal_futurama()(12)
+
+#' Generate a color palette (n=10)
+#'
+#' @export
+pal_10 <- function() pal_aaas()(10)
+
+#' flexible custom ggplot theme
+#'
+#' @export
 otheme <- function(strip.size = 8, margin = c(.5,.5,.5,.5),
                    legend.pos = '', legend.dir = 'v', legend.border = F, 
                    xticks = F, yticks = F, xtitle = F, ytitle = F, 
@@ -18,7 +51,7 @@ otheme <- function(strip.size = 8, margin = c(.5,.5,.5,.5),
               strip.text = element_text(size = strip.size,
                                         margin = margin(0,0,0,0,'lines')))
     #{{{ legend
-    o = o + 
+    o = o +
         theme(legend.background = element_blank(),
               legend.title = element_blank(),
               legend.key.size = unit(.8, 'lines'), 
@@ -78,5 +111,34 @@ otheme <- function(strip.size = 8, margin = c(.5,.5,.5,.5),
         o = o + theme(panel.grid.major.y = element_blank())
     #}}}
     o + theme(plot.margin = unit(margin, "lines"))
+    #}}}
+}
+
+#' quick plot histogram
+#
+#' @export
+plot_hist <- function(x, fo='~/tmp.pdf', xlab='xlab', ylab='count') {
+    #{{{
+    p1 = ggplot() +
+        geom_histogram(aes(x = x)) +
+        otheme_bw(legend.pos='right', legend.dir='v',
+                  xtitle=T, ytitle=T, xtext=T, ytext=T)
+    ggsave(p1, filename = fo, width = 6, height = 6)
+    #}}}
+}
+
+#' quick linear regression
+#'
+#' @export
+lg <- function(a, b, name1, name2, f_png) {
+    #{{{
+    png(filename=f_png, width=500, height=500, units='px');
+    plot(a, b, type="p", xlab=name1, ylab=name2)
+    fit = lm(b~a)
+    abline(fit, col="blue")
+    fit.sum = summary(fit)
+    ann = paste("adjusted Rsquare = ", sprintf("%.04f", fit.sum$adj.r.squared), sep="")
+    text(0.8*min(a)+0.2*max(a), 0.8*min(b)+0.2*max(b), ann, col='red')
+    dev.off();
     #}}}
 }

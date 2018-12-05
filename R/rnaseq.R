@@ -1,22 +1,16 @@
-dirr = '~/git/rmaize/R'
-source(file.path(dirr, 'header.R'))
-source(file.path(dirr, 'plot.R'))
-source(file.path(dirr, 'genomes.R'))
-require(yaml)
-#
-dirp = '~/projects/maize.expression/data'
-dird = '~/projects/maize.expression/data'
-dirc = '/scratch.global/zhoux379/maize.expression'
+dirp = '~/projects/rnaseq'
+dird = file.path(dirp, 'data')
+dirc = '/scratch.global/zhoux379/rnaseq'
 f_cfg = file.path(dird, '01.cfg.xlsx')
 t_cfg = read_xlsx(f_cfg, sheet=1, col_names=T) %>% replace_na(list('meta'=F))
-f_yml = file.path(dird, '11.cfg.yaml')
+f_yml = file.path(dird, '10.cfg.yaml')
 Sys.setenv("R_CONFIG_FILE" = f_yml)
 
 get_read_list <- function(dird, sid) {
     #{{{
     fh1 = sprintf("%s/05_read_list/%s.tsv", dird, sid)
     fh2 = sprintf("%s/05_read_list/%s.c.tsv", dird, sid)
-    fh = ifelse(file.exists(fh2), fh2, fh1) 
+    fh = ifelse(file.exists(fh2), fh2, fh1)
     read_tsv(fh)
     #}}}
 }
@@ -132,7 +126,7 @@ read_multiqc_featurecounts <- function(fi) {
 readcount_norm <- function(t_rc, t_gs = F) {
     #{{{ normalize
     tm = t_rc
-    tw = tm %>% 
+    tw = tm %>%
         select(SampleID, gid, ReadCount) %>%
         spread(SampleID, ReadCount)
     gids = tw$gid
@@ -140,8 +134,8 @@ readcount_norm <- function(t_rc, t_gs = F) {
     rownames(twd) = tw$gid
     # nRC with DESeq2
     require(DESeq2)
-    th = tm %>% distinct(SampleID) %>% mutate(sid = SampleID) %>% arrange(SampleID)
-    th2 = th %>% mutate(SampleID = factor(SampleID))
+    th = tm %>% distinct(SampleID) %>% arrange(SampleID)
+    th2 = th %>% mutate(sid = SampleID, SampleID = factor(SampleID))
     thd = column_to_rownames(as.data.frame(th2), var = 'sid')
     stopifnot(identical(rownames(thd), colnames(twd)))
     dds = DESeqDataSetFromMatrix(countData=twd, colData=thd, design = ~SampleID)
@@ -154,21 +148,21 @@ readcount_norm <- function(t_rc, t_gs = F) {
     require(edgeR)
     y = DGEList(counts = twd)
     y = calcNormFactors(y, method = 'TMM')
-    t_nf = y$samples %>% as_tibble() %>% 
+    t_nf = y$samples %>% as_tibble() %>%
         mutate(SampleID = rownames(y$samples)) %>%
         transmute(SampleID = SampleID, libSize = lib.size, normFactor = norm.factors)
     t_cpm = cpm(y) %>% as_tibble() %>% mutate(gid = rownames(cpm(y))) %>%
         select(gid, everything()) %>%
         gather(SampleID, CPM, -gid)
-    t_rcpm = cpm(y, normalized = F) %>% as_tibble() %>% 
+    t_rcpm = cpm(y, normalized = F) %>% as_tibble() %>%
         mutate(gid = rownames(cpm(y))) %>%
         gather(SampleID, rCPM, -gid)
     # rFPKM & FPKM
     if(is.list(t_gs)) {
-        t_cpm = t_cpm %>% left_join(t_gs, by = 'gid') %>% 
+        t_cpm = t_cpm %>% left_join(t_gs, by = 'gid') %>%
             mutate(FPKM = CPM / (size / 1000)) %>%
             select(-size)
-        t_rcpm = t_rcpm %>% left_join(t_gs, by = 'gid') %>% 
+        t_rcpm = t_rcpm %>% left_join(t_gs, by = 'gid') %>%
             mutate(rFPKM = rCPM / (size / 1000)) %>%
             select(-size)
     }
@@ -178,25 +172,9 @@ readcount_norm <- function(t_rc, t_gs = F) {
     tm = tm %>% 
         left_join(t_nrc, by = c('SampleID','gid')) %>%
         left_join(t_rcpm, by = c('SampleID','gid')) %>%
-        left_join(t_cpm, by = c('SampleID','gid')) 
+        left_join(t_cpm, by = c('SampleID','gid'))
     stopifnot(nrow(tm) == length(gids) * nrow(th))
     list(tl = tl, tm = tm)
-    #}}}
-}
-plot_hclust_tree <- function(tree, tp, fo, labsize = 3, x.expand = .2, x.off = .05, wd = 6, ht = 8) {
-    #{{{
-    cols1 = c('gray80','black','red','seagreen3', pal_d3()(5))
-    p1 = ggtree(tree) +
-        #geom_tiplab(size = labsize, color = 'black') +
-        scale_x_continuous(expand = expand_scale(mult=c(.02,x.expand))) +
-        scale_y_discrete(expand = c(.01,0)) +
-        theme_tree2()
-    p1 = p1 %<+% tp +
-        geom_tiplab(aes(label = lab), size = labsize, offset = x.off, family = 'mono')
-        #geom_text(aes(label = SampleID), size = 2, nudge_x = .001, hjust = 0) +
-        #geom_text(aes(label = Genotype), size = 2, nudge_x= .015, hjust = 0) +
-        #geom_text(aes(label = Rep), size = 2, nudge_x = .022, hjust = 0)
-    ggsave(p1, filename = fo, width = wd, height = ht)
     #}}}
 }
 plot_pca <- function(tp, fo, opt = 'col=tis', labsize = 2.5, wd = 8, ht = 8) {
