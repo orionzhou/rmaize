@@ -1,0 +1,3 @@
+#Common R utility libraries
+
+Collection of R utility libraries to process genomic range operations, statistical testing and a lot more...

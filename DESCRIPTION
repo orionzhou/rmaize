@@ -2,8 +2,8 @@ Package: rmaize
 Title: Common bioinformatic utilities
 Version: 0.0.0.9000
 Authors@R: person("Peng", "Zhou", email = "zhoupenggeni@gmail.com", role = c("aut", "cre"))
-Description: An R package for routine bioinformatic research
-License: MIT License
+Description: An R package for common bioinformatic tasks
+License: BSD 2-Clause License
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 6.1.0
