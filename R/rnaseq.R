@@ -1,134 +1,98 @@
-dirp = '~/projects/rnaseq'
-dird = file.path(dirp, 'data')
-dirc = '/scratch.global/zhoux379/rnaseq'
-f_cfg = file.path(dird, '01.cfg.xlsx')
-t_cfg = read_xlsx(f_cfg, sheet=1, col_names=T) %>% replace_na(list('meta'=F))
-f_yml = file.path(dird, '10.cfg.yaml')
-Sys.setenv("R_CONFIG_FILE" = f_yml)
+#' get RNA-Seq sample meta table
+#'
+#' @export
+rnaseq_sample_meta <- function(yid='rn18g',dird='~/projects/rnaseq/data') {
+    #{{{
+    fh1 = sprintf("%s/05_meta/%s.tsv", dird, yid)
+    #fh2 = sprintf("%s/06_meta_final/%s.c.tsv", dird, mid)
+    #fh = ifelse(file.exists(fh2), fh2, fh1)
+    read_tsv(fh1)
+    #}}}
+}
 
-get_read_list <- function(dird, sid) {
-    #{{{
-    fh1 = sprintf("%s/05_read_list/%s.tsv", dird, sid)
-    fh2 = sprintf("%s/05_read_list/%s.c.tsv", dird, sid)
-    fh = ifelse(file.exists(fh2), fh2, fh1)
-    read_tsv(fh)
-    #}}}
-}
-read_multiqc_trimmomatic <- function(fi, paired = T) {
-    #{{{
-    ti = read_tsv(fi)
-    types = c("surviving", "forward_only_surviving", "reverse_only_surviving", "dropped")
-    if (paired == F) {
-        nd = ti %>% mutate(nd = input_reads - surviving - dropped) %>%
-            group_by(1) %>% summarise(nd = sum(nd)) %>% pull(nd)
-        stopifnot(nd == 0)
-        to = ti %>% mutate(SampleID = Sample, total = input_reads, 
-                           surviving_f=0, surviving_r=0)
-    } else if(paired == T | paired == 'both') {
-        ti2 = ti %>% 
-            separate(Sample, c("SampleID",'suf'), sep="_", fill='right', extra='merge') %>% select(-suf) %>%
-            mutate(surviving_f = forward_only_surviving,
-                   surviving_r = reverse_only_surviving)
-        if(paired == 'both') 
-            ti2 = ti2 %>% 
-                replace_na(list('input_reads'=0, 'input_read_pairs'=0,
-                                'surviving_f'=0, 'surviving_r'=0)) %>%
-                mutate(input_read_pairs = 
-                    ifelse(input_read_pairs == 0, input_reads, input_read_pairs))
-        nd = ti2 %>% mutate(nd = input_read_pairs - surviving - 
-                            surviving_f - surviving_r - dropped) %>%
-            group_by(1) %>% summarise(nd = sum(nd)) %>% pull(nd)
-        stopifnot(nd == 0)
-        to = ti2 %>% mutate(total = input_read_pairs)
+#' get RNA-Seq mapping stats
+#'
+#' @export
+rnaseq_mapping_stat <- function(yid, dird='~/projects/rnaseq/data') {
+    #{{{ mapping stats
+    th = rnaseq_sample_meta(yid) %>% select(SampleID,paired)
+    diri = file.path(dird, 'raw', yid)
+    fi = file.path(diri, 'trimming.tsv')
+    tt1 = read_tsv(fi) %>% rename(SampleID = sid) %>%
+        separate(SampleID, c('SampleID','suf'), sep='[\\_]', extra='merge', fill='right')
+    if('passed_filter_reads' %in% colnames(tt1)) {
+        tt1 = tt1 %>% group_by(SampleID) %>%
+            summarise(passed = sum(passed_filter_reads),
+                      lowQ = sum(low_quality_reads),
+                      manyN = sum(too_many_N_reads),
+                      short = sum(too_short_reads),
+                      long = sum(too_long_reads)) %>% ungroup() %>%
+            mutate(failed = lowQ + manyN + short + long) %>%
+            inner_join(th, by='SampleID') %>%
+            mutate(passed = ifelse(paired, passed/2, passed)) %>%
+            mutate(failed = ifelse(paired, failed/2, failed)) %>%
+            mutate(total = passed+failed) %>%
+            select(SampleID, total, passed, failed)
+    } else if('readsIn' %in% colnames(tt1)) {
+        tt1 = tt1 %>% rename(total=readsIn, passed=readsOut, failed=readsRemoved) %>%
+            group_by(SampleID) %>%
+            summarise(total=sum(total), passed=sum(passed), failed=sum(failed)) %>%
+            select(SampleID, total, passed, failed)
     } else {
-        stop(sprintf("unsupported option: %s", paired))
+        stop("cannot detect triming.tsv format")
     }
-    to %>%
-        select(SampleID, total, surviving, surviving_f, surviving_r, dropped)
-    #}}}
-}
-read_multiqc_star <- function(fi, paired = T) {
-    #{{{
-    ti = read_tsv(fi)
-    if(paired == F) {
-        ti2 = ti %>% mutate(SampleID = Sample) %>% select(-Sample)
-    } else {
-        ti2 = ti %>% separate(Sample, c("SampleID",'suf'), sep="_", fill='right', extra='merge') %>% 
-            select(-suf) 
-    }
-    ti2 = ti2 %>%
-        transmute(SampleID = SampleID, total = total_reads,
-                  uniquely_mapped = uniquely_mapped,
-                  multimapped = multimapped + multimapped_toomany,
-                  unmapped = unmapped_mismatches + unmapped_tooshort + unmapped_other,
-                  nd = total - uniquely_mapped - multimapped - unmapped) 
-    stopifnot(sum(ti2$nd) < 1000)
-    ti2 = ti2 %>% group_by(SampleID) %>%
-        summarise(uniquely_mapped = sum(uniquely_mapped),
-                  multimapped = sum(multimapped),
-                  unmapped = sum(unmapped))
-    types = c("uniquely_mapped", "multimapped", "unmapped")
-    to = ti2 %>% select(SampleID, uniquely_mapped, multimapped, unmapped)
-    to
-    #}}}
-}
-read_multiqc_hisat2 <- function(fi, paired = T) {
-    #{{{
-    ti = read_tsv(fi)
-    if(paired == F) {
-        ti2 = ti %>% 
-            transmute(SampleID = Sample,
-                      total = unpaired_total,
-                      uniquely_mapped = unpaired_aligned_one,
-                      multimapped = unpaired_aligned_multi,
-                      unmapped = unpaired_aligned_none)
-    } else {
-        ti2 = ti %>% 
-            transmute(SampleID = Sample,
-                      #total = paired_total + unpaired_total,
-                      #uniquely_mapped = paired_aligned_one+paired_aligned_discord_one+unpaired_aligned_one,
-                      #multimapped = paired_aligned_multi+unpaired_aligned_multi,
-                      #unmapped = paired_aligned_none+unpaired_aligned_none)
-                      total = paired_total,
-                      uniquely_mapped = paired_aligned_one+paired_aligned_discord_one,
-                      multimapped = paired_aligned_multi,
-                      unmapped = paired_aligned_none)
-    }
-    ti2 = ti2 %>% mutate(nd = total - uniquely_mapped - multimapped - unmapped)
-    cat(sum(ti2$nd),"\n")
-    stopifnot(sum(ti2$nd) < 1000)
-    to = ti2 %>% group_by(SampleID) %>%
-        summarise(uniquely_mapped = sum(uniquely_mapped),
-                  multimapped = sum(multimapped),
-                  unmapped = sum(unmapped))
-    types = c("uniquely_mapped", "multimapped", "unmapped")
-    to
-    #}}}
-}
-read_multiqc_featurecounts <- function(fi) {
-    #{{{
-    ti = read_tsv(fi)
-    ti2 = ti %>% mutate(SampleID = Sample) %>%
-        select(SampleID, Total, Assigned, Unassigned_Unmapped, 
-               Unassigned_MultiMapping,
-               Unassigned_NoFeatures, Unassigned_Ambiguity) %>%
-        mutate(nd = Total-Assigned-Unassigned_Unmapped-Unassigned_MultiMapping-Unassigned_NoFeatures-Unassigned_Ambiguity)
-    stopifnot(sum(as.numeric(ti2$nd)) == 0)
+    fi = file.path(diri, 'bamstats.tsv')
+    tt2 = read_tsv(fi) %>% rename(SampleID=sid)
     #
-    types = c("Assigned", "Unassigned_MultiMapping", "Unassigned_Unmapped",
-              "Unassigned_NoFeatures", "Unassigned_Ambiguity")
-    to = ti2 %>% select(SampleID, Assigned, Unassigned_MultiMapping,
-                        Unassigned_NoFeatures, Unassigned_Ambiguity, 
-                        Unassigned_Unmapped)
-    to
+    tt = tt1 %>%
+        left_join(tt2, by = 'SampleID') %>%
+        mutate(mapped=pair_map+pair_orphan+unpair_map,
+               mappedu=pair_map_hq+pair_orphan_hq+unpair_map_hq) %>%
+        mutate(p.passed=passed/total, p.mapped=mapped/total, p.mappedu=mappedu/total) %>%
+        mutate(total=total/1e6, passed=passed/1e6, mapped=mapped/1e6, mappedu=mappedu/1e6) %>%
+        select(SampleID,total,passed,mapped,mappedu,p.passed,p.mapped,p.mappedu)
+    tt
     #}}}
 }
+
+#' read one RNA-Seq study result (raw)
+#'
+#' @export
+rnaseq_cpm_raw <- function(yid, diri='~/projects/rnaseq/data/11_qc') {
+    #{{{
+    fi = sprintf("%s/%s/00.raw.rds", diri, yid)
+    stopifnot(file.exists(fi))
+    readRDS(fi)
+    #}}}
+}
+
+#' read one RNA-Seq study result (final)
+#'
+#' @export
+rnaseq_cpm <- function(yid, diri='~/projects/rnaseq/data/11_qc') {
+    #{{{
+    fi = sprintf("%s/%s/01.rds", diri, yid)
+    stopifnot(file.exists(fi))
+    readRDS(fi)
+    #}}}
+}
+
+#' normalize RNA-Seq read count matrix
+#'
+#' @export
 readcount_norm <- function(t_rc, t_gs = F) {
     #{{{ normalize
+    smMap = t_rc %>% distinct(SampleID) %>% dplyr::rename(oSampleID=SampleID) %>%
+        mutate(nSampleID = str_replace_all(oSampleID, '[^a-zA-z0-9_]', '.'))
     tm = t_rc
+    if (! identical(smMap$oSampleID, smMap$nSampleID))
+        tm = tm %>% inner_join(smMap, by=c('SampleID'='oSampleID')) %>%
+            select(-SampleID) %>% select(SampleID=nSampleID, everything())
     tw = tm %>%
         select(SampleID, gid, ReadCount) %>%
-        spread(SampleID, ReadCount)
+        spread(SampleID, ReadCount) %>%
+        replace(., is.na(.), 0)
+    tm = tw %>% gather(SampleID, ReadCount, -gid)
     gids = tw$gid
     twd = data.frame(tw[,-1])
     rownames(twd) = tw$gid
@@ -138,7 +102,7 @@ readcount_norm <- function(t_rc, t_gs = F) {
     th2 = th %>% mutate(sid = SampleID, SampleID = factor(SampleID))
     thd = column_to_rownames(as.data.frame(th2), var = 'sid')
     stopifnot(identical(rownames(thd), colnames(twd)))
-    dds = DESeqDataSetFromMatrix(countData=twd, colData=thd, design = ~SampleID)
+    dds = DESeqDataSetFromMatrix(countData=twd, colData=thd, design = ~ 1)
     dds = estimateSizeFactors(dds)
     sf = sizeFactors(dds)
     t_sf = tibble(SampleID = names(sf), sizeFactor = as.numeric(sf))
@@ -150,7 +114,7 @@ readcount_norm <- function(t_rc, t_gs = F) {
     y = calcNormFactors(y, method = 'TMM')
     t_nf = y$samples %>% as_tibble() %>%
         mutate(SampleID = rownames(y$samples)) %>%
-        transmute(SampleID = SampleID, libSize = lib.size, normFactor = norm.factors)
+        select(SampleID, libSize=lib.size, normFactor=norm.factors)
     t_cpm = cpm(y) %>% as_tibble() %>% mutate(gid = rownames(cpm(y))) %>%
         select(gid, everything()) %>%
         gather(SampleID, CPM, -gid)
@@ -169,158 +133,24 @@ readcount_norm <- function(t_rc, t_gs = F) {
     #
     tl = th %>% inner_join(t_sf, by = 'SampleID') %>%
         inner_join(t_nf, by = 'SampleID')
-    tm = tm %>% 
+    tm = tm %>%
         left_join(t_nrc, by = c('SampleID','gid')) %>%
         left_join(t_rcpm, by = c('SampleID','gid')) %>%
         left_join(t_cpm, by = c('SampleID','gid'))
     stopifnot(nrow(tm) == length(gids) * nrow(th))
+    if (! identical(smMap$oSampleID, smMap$nSampleID)) {
+        tl = tl %>% inner_join(smMap, by=c('SampleID'='nSampleID')) %>%
+            dplyr::select(-SampleID) %>% dplyr::select(SampleID=oSampleID, everything())
+        tm = tm %>% inner_join(smMap, by=c('SampleID'='nSampleID')) %>%
+            dplyr::select(-SampleID) %>% dplyr::select(SampleID=oSampleID, everything())
+    }
     list(tl = tl, tm = tm)
     #}}}
 }
-plot_pca <- function(tp, fo, opt = 'col=tis', labsize = 2.5, wd = 8, ht = 8) {
-    #{{{
-    if(opt == 'col=tis,sha=rep') {
-        #{{{
-        p1 = ggplot(tp, aes(x = PC1, y = PC2, color = Tissue, shape = Replicate)) +
-            geom_point(size = 1.5) +
-            scale_x_continuous(name = xlab) + scale_y_continuous(name = ylab) +
-            scale_color_d3() +
-            scale_shape_manual(values = shapes) +
-            guides(direction = 'vertical', color = guide_legend(ncol = 1)) +
-            guides(shape = guide_legend(ncol = 1, byrow = T)) +
-            otheme(legend.pos = 'top.left', xgrid = T, ygrid = T, xtitle = T, ytitle = T, xtext = T, ytext = T)
-        #}}}
-    } else if(opt == 'lab=tis,sha=rep') {
-        #{{{
-        p1 = ggplot(tp, aes(x = PC1, y = PC2, label = Tissue, shape = Replicate)) +
-            geom_point(size = 1.5) +
-            geom_text_repel(size = labsize) +
-            scale_x_continuous(name = xlab) + scale_y_continuous(name = ylab) +
-            scale_color_d3() +
-            scale_shape_manual(values = shapes) +
-            guides(direction = 'vertical', color = guide_legend(ncol = 1)) +
-            guides(shape = guide_legend(ncol = 1, byrow = T)) +
-            otheme(legend.pos = 'top.left', xgrid = T, ygrid = T, xtitle = T, ytitle = T, xtext = T, ytext = T)
-        #}}}
-    } else if(opt == 'lab=tre,sha=rep') {
-        #{{{
-        p1 = ggplot(tp, aes(x = PC1, y = PC2, label = Treatment, shape = Replicate)) +
-            geom_point(size = 1.5) +
-            geom_text_repel(size = labsize) +
-            scale_x_continuous(name = xlab) + scale_y_continuous(name = ylab) +
-            scale_color_d3() +
-            scale_shape_manual(values = shapes) +
-            guides(direction = 'vertical', color = guide_legend(ncol = 1)) +
-            guides(shape = guide_legend(ncol = 1, byrow = T)) +
-            otheme(legend.pos = 'top.left', xgrid = T, ygrid = T, xtitle = T, ytitle = T, xtext = T, ytext = T)
-        #}}}
-    } else if(opt == 'lab=tre') {
-        #{{{
-        p1 = ggplot(tp, aes(x = PC1, y = PC2, label = Treatment)) +
-            geom_point(size = 1.5) +
-            geom_text_repel(size = labsize) +
-            scale_x_continuous(name = xlab) + scale_y_continuous(name = ylab) +
-            scale_color_d3() +
-            scale_shape_manual(values = shapes) +
-            guides(direction = 'vertical', color = guide_legend(ncol = 1)) +
-            guides(shape = guide_legend(ncol = 1, byrow = T)) +
-            otheme(legend.pos = 'top.left', xgrid = T, ygrid = T, xtitle = T, ytitle = T, xtext = T, ytext = T)
-        #}}}
-    } else if(opt == 'lab=gen,sha=tis') {
-        #{{{
-        p1 = ggplot(tp, aes(x = PC1, y = PC2, label = Genotype, shape = Tissue)) +
-            geom_point(size = 1.5) +
-            geom_text_repel(size = labsize) +
-            scale_x_continuous(name = xlab) + scale_y_continuous(name = ylab) +
-            scale_shape_manual(values = shapes) +
-            guides(direction = 'vertical', color = guide_legend(ncol = 1)) +
-            guides(shape = guide_legend(ncol = 1, byrow = T)) +
-            otheme(legend.pos = 'top.left', xgrid = T, ygrid = T, xtitle = T, ytitle = T, xtext = T, ytext = T)
-        #}}}
-    } else if(opt == 'lab=tis,sha=gen') {
-        #{{{
-        p1 = ggplot(tp, aes(x = PC1, y = PC2, label = Tissue, shape = Genotype)) +
-            geom_point(size = 1.5) +
-            geom_text_repel(size = labsize) +
-            scale_x_continuous(name = xlab) + scale_y_continuous(name = ylab) +
-            scale_color_d3() +
-            scale_shape_manual(values = shapes) +
-            guides(direction = 'vertical', color = guide_legend(ncol = 1)) +
-            guides(shape = guide_legend(ncol = 1, byrow = T)) +
-            otheme(legend.pos = 'top.left', xgrid = T, ygrid = T, xtitle = T, ytitle = T, xtext = T, ytext = T)
-        #}}}
-    } else if(opt == 'lab=tis,col=sid,sha=sid') {
-        #{{{
-        p1 = ggplot(tp, aes(x = PC1, y = PC2, label = Tissue, color = sid, shape = sid)) +
-            geom_point(size = 1.5) +
-            geom_text_repel(size = labsize) +
-            scale_x_continuous(name = xlab) + scale_y_continuous(name = ylab) +
-            scale_color_d3() +
-            scale_shape_manual(values = shapes) +
-            guides(direction = 'vertical', color = guide_legend(ncol = 1)) +
-            guides(shape = guide_legend(ncol = 1, byrow = T)) +
-            otheme(legend.pos = 'top.left', xgrid = T, ygrid = T, xtitle = T, ytitle = T, xtext = T, ytext = T)
-        #}}}
-    } else if(opt == 'col=tis,sha=tre') {
-        #{{{
-        p1 = ggplot(tp, aes(x = PC1, y = PC2, color = Tissue, shape = Treatment)) +
-            geom_point(size = 1.5) +
-            scale_x_continuous(name = xlab) + scale_y_continuous(name = ylab) +
-            scale_color_d3() +
-            scale_shape_manual(values = shapes) +
-            guides(direction = 'vertical', fill = guide_legend(ncol = 1)) +
-            guides(shape = guide_legend(ncol = 1, byrow = T)) +
-            otheme(legend.pos = 'top.left', xgrid = T, ygrid = T, xtitle = T, ytitle = T, xtext = T, ytext = T)
-        #}}}
-    } else if(opt == 'col=tis') {
-        #{{{
-        p1 = ggplot(tp, aes(x = PC1, y = PC2, color = Tissue)) +
-            geom_point(size = 1.5) +
-            scale_x_continuous(name = xlab) + scale_y_continuous(name = ylab) +
-            scale_color_d3() +
-            guides(direction = 'vertical', color = guide_legend(ncol = 1)) +
-            guides(shape = guide_legend(ncol = 1, byrow = T)) +
-            otheme(legend.pos = 'top.left', xgrid = T, ygrid = T, xtitle = T, ytitle = T, xtext = T, ytext = T)
-        #}}}
-    } else if(opt == 'col=tis,sha=tis') {
-        #{{{
-        p1 = ggplot(tp, aes(x = PC1, y = PC2, color = Tissue, shape = Tissue)) +
-            geom_point(size = 1.5) +
-            scale_x_continuous(name = xlab) + scale_y_continuous(name = ylab) +
-            scale_color_d3() +
-            scale_shape_manual(values = shapes) +
-            guides(direction = 'vertical', color = guide_legend(ncol = 1)) +
-            guides(shape = guide_legend(ncol = 1, byrow = T)) +
-            otheme(legend.pos = 'top.left', xgrid = T, ygrid = T, xtitle = T, ytitle = T, xtext = T, ytext = T)
-        #}}}
-    } else if(opt == 'col=tre,sha=rep') {
-        #{{{
-        p1 = ggplot(tp, aes(x = PC1, y = PC2, color = Treatment, shape = Replicate)) +
-            geom_point(size = 1.5) +
-            scale_x_continuous(name = xlab) + scale_y_continuous(name = ylab) +
-            scale_color_d3() +
-            scale_shape_manual(values = shapes) +
-            guides(direction = 'vertical', color = guide_legend(ncol = 1)) +
-            guides(shape = guide_legend(ncol = 1, byrow = T)) +
-            otheme(legend.pos = 'top.left', xgrid = T, ygrid = T, xtitle = T, ytitle = T, xtext = T, ytext = T)
-        #}}}
-    } else if(opt == 'sha=rep') {
-        #{{{
-        p1 = ggplot(tp, aes(x = PC1, y = PC2, shape = Replicate)) +
-            geom_point(size = 1.5) +
-            scale_x_continuous(name = xlab) + scale_y_continuous(name = ylab) +
-            scale_color_d3() +
-            scale_shape_manual(values = shapes) +
-            guides(direction = 'vertical', color = guide_legend(ncol = 1)) +
-            guides(shape = guide_legend(ncol = 1, byrow = T)) +
-            otheme(legend.pos = 'top.left', xgrid = T, ygrid = T, xtitle = T, ytitle = T, xtext = T, ytext = T)
-        #}}}
-    } else {
-        stop(sprintf("unknown opt: %s", opt))
-    }
-    ggsave(p1, filename = fo, width = wd, height = ht)
-    #}}}
-}
+
+#' merge replicates
+#'
+#' @export
 merge_reps <- function(th, tm, sid) {
     #{{{
     if("sid" %in% colnames(th)) {
@@ -347,26 +177,162 @@ merge_reps <- function(th, tm, sid) {
     list(th = th, tm = tm)
     #}}}
 }
-me_output <- function(sid, study, meta, dird = dird) {
+
+#' plot hclust
+#'
+#' @export
+plot_hclust <- function(tm, th, min.value=1, pct.exp=.5,
+                        cor.opt='pearson', hc.opt='ward.D',
+                        var.lab='lab', var.col='Genotype',
+                        lab.size=2.5, expand.x=.2, pal.col='aaas') {
+    #{{{ hclust
+    tw = tm %>% select(SampleID, gid, value) %>% spread(SampleID, value)
+    t_exp = tm %>% group_by(gid) %>% summarise(n.exp = sum(value>=min.value))
+    gids = t_exp %>% filter(n.exp >= (ncol(tw)-1) * pct.exp) %>% pull(gid)
+    e = tw %>% filter(gid %in% gids) %>% select(-gid)
+    dim(e)
+    #
+    hc_title = sprintf("dist: %s\nhclust: %s", cor.opt, hc.opt)
+    edist <- as.dist(1-cor(e, method = cor.opt))
+    ehc <- hclust(edist, method = hc.opt)
+    tree = as.phylo(ehc)
+    lnames = ehc$labels[ehc$order]
+    #
+    tp = th %>% mutate(taxa = SampleID) %>%
+        select(taxa, everything())
+    p1 = ggtree(tree, layout = 'rectangular') +
+        scale_x_continuous(expand = expansion(mult=c(1e-2,expand.x))) +
+        scale_y_discrete(expand = expansion(mult=c(.01,.01)))
+    p1 = p1 %<+%
+        tp + geom_tiplab(aes(label=get(var.lab), color=get(var.col)), size=lab.size) +
+        get(str_c('scale_color', pal.col, sep="_"))() +
+        guides(color=F)
+    p1
+    #}}}
+}
+
+#' plot PCA
+#'
+#' @export
+plot_pca <- function(tm, th, min.value=1, pct.exp=.5, pca.center=F, pca.scale=F, ...) {
     #{{{
-    diri = file.path(dird, '11_qc', sid)
-    diro = file.path(dird, '15_output')
-    fi = file.path(diri, '20.rc.norm.rda')
-    if(!file.exists(fi)) {
-        cat(sprintf("%s[%s]: no data\n", sid, study))
-    } else {
-        x = load(fi)
-        if(is.na(meta) | meta != T) {
-            th = get_read_list(dird, sid)
-            tm = tm %>% filter(SampleID %in% th$SampleID)
-            res = merge_reps(th, tm, sid)
-            th = res$th; tm = res$tm
-        }
-        #stopifnot(nrow(th) * ngene == nrow(tm))
-        fo = sprintf("%s/%s.rda", diro, sid)
-        save(th, tm, file = fo)
-    }
-    T
+    tw = tm %>% select(SampleID, gid, value) %>%
+        filter(SampleID %in% th$SampleID) %>% spread(SampleID, value)
+    t_exp = tm %>% group_by(gid) %>% summarise(n.exp = sum(value>=min.value))
+    gids = t_exp %>% filter(n.exp >= (ncol(tw)-1) * pct.exp) %>% pull(gid)
+    #
+    e = tw %>% filter(gid %in% gids) %>% select(-gid)
+    dim(e)
+    pca <- prcomp(e, center = pca.center, scale. = pca.scale)
+    tx = pca['rotation'][[1]]
+    imp = summary(pca)$importance
+    #
+    xlab = sprintf("PC1 (%.01f%%)", imp[2,1]*100)
+    ylab = sprintf("PC2 (%.01f%%)", imp[2,2]*100)
+    tp = as_tibble(tx[,1:5]) %>%
+        add_column(SampleID = rownames(tx)) %>%
+        rename(x=PC1, y=PC2) %>%
+        inner_join(th, by = 'SampleID')
+    plot_clustering_2d(tp, xtitle=xlab, ytitle=ylab, ...)
+    #}}}
+}
+
+#' plot tsne
+#'
+#' @export
+plot_tsne <- function(tm, th, min.value=1, pct.exp=.5, perp=6, iter=1200,
+                      seed=42, ...) {
+    #{{{ tSNE
+    require(Rtsne)
+    tw = tm %>% select(SampleID, gid, value) %>%
+        filter(SampleID %in% th$SampleID) %>% spread(SampleID, value)
+    t_exp = tm %>% group_by(gid) %>% summarise(n.exp = sum(value>=min.value))
+    gids = t_exp %>% filter(n.exp >= (ncol(tw)-1) * pct.exp) %>% pull(gid)
+    tt = tw %>% filter(gid %in% gids)
+    dim(tt)
+    tsne <- Rtsne(t(as.matrix(tt[-1])), dims=2, verbose=T, perplexity=perp,
+                  pca = T, max_iter = iter, check_duplicates = F)
+    #
+    tp = tsne$Y %>% as.data.frame() %>% as_tibble() %>%
+        rename(x=V1, y=V2) %>%
+        add_column(SampleID = colnames(tt)[-1]) %>%
+        inner_join(th, by = 'SampleID')
+    plot_clustering_2d(tp, xtitle='tSNE-1', ytitle='tSNE-2', ...)
+    #}}}
+}
+
+plot_clustering_2d <- function(tp, xtitle='PC1', ytitle='PC2',
+    var.lab='lab', var.col='', var.shape='', var.ellipse='',
+    leg.col=T, leg.shape=T,
+    legend.pos='top.right', legend.dir='v', legend.box='v', legend.title=T,
+    point.size=2, lab.size=2, pal.col='aaas') {
+    #{{{ tSNE
+    x.max=max(tp$x)
+    p = ggplot(tp, aes(x,y))
+    # point shape and color aesthetics
+    if (var.shape == '' & var.col == '')
+        p = p + geom_point(size=point.size)
+    else if(var.shape == '' & var.col != '')
+        p = p + geom_point(aes(color=get(var.col)), size=point.size) +
+            get(str_c('scale_color', pal.col, sep="_"))(name=var.col)
+    else if(var.shape != '' & var.col == '')
+        p = p + geom_point(aes(shape=get(var.shape)), size=point.size) +
+            scale_shape_manual(name=var.shape, values = c(0:10))
+    else
+        p = p + geom_point(aes(color=get(var.col), shape=get(var.shape)), size=point.size) +
+            get(str_c('scale_color', pal.col, sep="_"))(name=var.col) +
+            scale_shape_manual(name=var.shape, values = c(0:10))
+    # ellipse
+    if (var.ellipse != '')
+        p = p + geom_mark_ellipse(aes(fill=get(var.ellipse)),
+            expand=unit(2,'mm'), alpha=0, size = .2,
+            con.type='none',label.fontsize=0,label.minwidth=unit(0,'mm'),
+            label.buffer=unit(0,'mm'),label.margin = margin(0,0,0,0,"mm"))
+    # point label
+    if (var.lab != '')
+        p = p + geom_text_repel(aes(label=get(var.lab)), size=lab.size)
+    p = p +
+        scale_x_continuous(name = xtitle) +
+        scale_y_continuous(name = ytitle) +
+        otheme(legend.pos=legend.pos, legend.dir=legend.dir,
+               legend.box=legend.box, legend.title=legend.title,
+               xtitle=T, ytitle=T,
+               margin = c(.2,.2,.2,.2)) +
+        theme(axis.ticks.length = unit(0, 'lines')) +
+        guides(fill=F)
+    if (!leg.col)
+        p =  p + guides(color=F)
+    if (!leg.shape)
+        p =  p + guides(shape=F)
+    p
+    #}}}
+}
+
+#' plot ASE allele-frequency boxplot
+#'
+#' @export
+plot_ase <- function(ta, th, min_rc=20, drc='h',
+                     val.col='black', val.fill='white', pal.col='aaas') {
+    #{{{
+    tp = ta %>% filter(allele1 + allele2 >= min_rc) %>%
+        mutate(af = allele1/(allele1 + allele2)) %>%
+        inner_join(th, by='SampleID') %>%
+        mutate(lab = factor(lab, levels=rev(th$lab)))
+    tps = tp %>% count(lab) %>% mutate(labn=sprintf("%s (%s)", lab, number(n, big.mark = ",", accuracy=1))) %>%
+        arrange(lab)
+    #tp %>% group_by(lab) %>%
+        #summarise(q50=median(af), m50=sum(allele1)/sum(allele1+allele2)) %>%
+        #ungroup() %>% print(n=70)
+    ort = ifelse(drc=='r', 'reverse', ifelse(drc=='v', 'vertical', 'horizontal'))
+    p = ggboxplot(tp, x='lab', y='af', color=val.col, fill=val.fill,
+                  orientation=ort, palette = pal.col,
+                  outlier.shape = NA, bxp.errorbar = T) +
+        geom_hline(yintercept = .5, color='black',linetype='dashed') +
+        scale_x_discrete(breaks=tps$lab, labels=tps$labn) +
+        scale_y_continuous(name='% allele1',expand=expansion(mult=c(.02,.02))) +
+        otheme(xtext=T, ytext=T, xtick=T, ytick=T, xtitle=T) +
+        guides(color=F, fill=F)
+    p
     #}}}
 }
 

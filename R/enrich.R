@@ -16,82 +16,100 @@ if (FALSE) {
 #' Read GO annotation for B73 AGP_v4
 #'
 #' @export
-get_go <- function(fgo = '~/data/genome/B73/61_functional/01.go.tsv') {
+read_go <- function(src = 'uniprot.plants', fgo = '~/projects/genome/data/Zmays_B73/61_functional/01.go.tsv') {
     #{{{
-    tgo = read_tsv(fgo)
-    unique(tgo$ctag)
-    gids_all = unique(tgo$gid)
-    tgo_ipr = tgo %>% filter(ctag == 'Interproscan5') %>% select(-ctag)
-    tgo_uni = tgo %>% filter(ctag == 'uniprot.plants') %>% select(-ctag)
-    tgo_ath = tgo %>% filter(ctag == 'arabidopsis') %>% select(-ctag)
-    tgo_arg = tgo %>% filter(ctag == 'argot2.5') %>% select(-ctag)
-    list(go=tgo, ipr=tgo_ipr, uni=tgo_uni, ath=tgo_ath, arg=tgo_arg)
+    ti = read_tsv(fgo)
+    if(src == 'all')
+        ti
+    else if(src %in% ti$ctag)
+        ti %>% filter(ctag == src) %>% select(-ctag)
+    else
+        stop(sprintf("unknown source: %s\n", src))
+    #unique(tgo$ctag)
+    #gids_all = unique(tgo$gid)
+    #tgo_ipr = tgo %>% filter(ctag == 'Interproscan5') %>% select(-ctag)
+    #tgo_uni = tgo %>% filter(ctag == 'uniprot.plants') %>% select(-ctag)
+    #tgo_ath = tgo %>% filter(ctag == 'arabidopsis') %>% select(-ctag)
+    #tgo_arg = tgo %>% filter(ctag == 'argot2.5') %>% select(-ctag)
+    #list(go=tgo, ipr=tgo_ipr, uni=tgo_uni, ath=tgo_ath, arg=tgo_arg)
     #}}}
 }
 
 #' Perform GO enrichment analysis using hypergeometric test
 #'
 #' @export
-go_enrich <- function(gids, tg) {
+go_enrich <- function(gids, tgo) {
     #{{{
-    tgn = tg %>% distinct(goid, goname, gotype, level)
-    tgs = tg %>% count(goid) %>% transmute(goid=goid, hitInPop = n)
-
-    gids_all = tg %>% distinct(gid) %>% pull(gid)
+    tgn = tgo %>% distinct(goid, goname, gotype, level)
+    tgs = tgo %>% count(goid) %>% select(goid, hitInPop = n)
+    #
+    gids_all = tgo %>% distinct(gid) %>% pull(gid)
     gids = unique(gids)
     gids = gids[gids %in% gids_all]
     sampleSize = length(gids)
-
-    tz = tg %>% filter(gid %in% gids) %>%
-        count(goid) %>% 
-        transmute(goid = goid, hitInSample = n)
-
-    tw = tz %>% inner_join(tgs, by = 'goid') %>% 
-        mutate(sampleSize = length(gids), popSize = length(gids_all), 
-            pval.raw = phyper(hitInSample-1, hitInPop, popSize-hitInPop, sampleSize, lower.tail = F),
-            pval.adj = p.adjust(pval.raw, method = "BH")) %>%
-        filter(pval.raw < 0.05) %>%
-        arrange(pval.adj) %>%
-        transmute(goid = goid, ratioInSample = sprintf("%d/%d", hitInSample, sampleSize),
-            ratioInPop = sprintf("%d/%d", hitInPop, popSize),
-            pval.raw = pval.raw, pval.adj = pval.adj)
-
-    tw %>% left_join(tgn, by = 'goid') %>% arrange(pval.adj, pval.raw)
+    #
+    tz = tgo %>% filter(gid %in% gids) %>%
+        count(goid) %>%
+        select(goid, hitInSample = n)
+    #
+    tz %>% inner_join(tgs, by = 'goid') %>%
+        mutate(sampleSize = length(gids), popSize = length(gids_all),
+            pval.raw = phyper(hitInSample-1, hitInPop, popSize-hitInPop, sampleSize, lower.tail = F)) %>%
+            #pval.adj = p.adjust(pval.raw, method = "BH")) %>%
+        #filter(pval.raw < 0.05) %>%
+        mutate(ratioInSample = sprintf("%d/%d", hitInSample, sampleSize)) %>%
+        mutate(ratioInPop = sprintf("%d/%d", hitInPop, popSize)) %>%
+        select(goid, ratioInSample, ratioInPop, pval.raw) %>%
+        left_join(tgn, by = 'goid') %>% arrange(pval.raw)
     #}}}
 }
 
-#' Perform GO enrichment analysis using hypergeometric test
+#' Perform hypergeometic enrichment test on a set of genes
 #'
 #' @export
-go_enrich_gosets <- function(gids, tgo. = tgo, pval.cutoff = 0.05,
-                             srcs = c("uniprot.plants", "arabidopsis", "corncyc", "tfdb", "Interproscan5")) {
+hyper_enrich <- function(gids, tgrp) { # grp, gid, note
     #{{{
-    to = tibble()
-    for (src in srcs) {
-        tgoc = tgo %>% filter(ctag == src) %>% select(-ctag)
-        to1 = go_enrich(gids, tgoc) %>% 
-            filter(pval.adj <= pval.cutoff) %>%
-            mutate(source = src) %>%
-            select(source, goid, ratioInSample, ratioInPop, pval.adj, gotype, goname)
-        to = rbind(to, to1)
-    }
-    to
+    tgn = tgrp %>% distinct(grp, note)
+    tgs = tgrp %>% count(grp) %>% select(grp, hitInPop = n)
+    #
+    gids_all = tgrp %>% distinct(gid) %>% pull(gid)
+    gids = unique(gids)
+    gids = gids[gids %in% gids_all]
+    sampleSize = length(gids)
+    #
+    tz = tgrp %>% filter(gid %in% gids) %>%
+        count(grp) %>%
+        select(grp, hitInSample = n)
+    #
+    tz %>% inner_join(tgs, by = 'grp') %>%
+        mutate(sampleSize = length(gids), popSize = length(gids_all),
+            pval.raw = phyper(hitInSample-1, hitInPop, popSize-hitInPop, sampleSize, lower.tail=F)) %>%
+            #pval.adj = p.adjust(pval.raw, method = "BH")) %>%
+        #filter(pval.raw < 0.05) %>%
+        mutate(ratioInSample = sprintf("%d/%d", hitInSample, sampleSize)) %>%
+        mutate(ratioInPop = sprintf("%d/%d", hitInPop, popSize)) %>%
+        select(grp, ratioInSample, ratioInPop, pval.raw) %>%
+        left_join(tgn, by = 'grp') %>% arrange(pval.raw)
     #}}}
 }
 
-#' Perform GO enrichment analysis using hypergeometric test
+#' Perform hypergeometric enrichment test on multiple gene sets
 #'
 #' @export
-go_enrich_genesets <- function(tgs, pval.cutoff = 0.05) {
+hyper_enrich_m <- function(tg, tgrp, method='BH', pval.cutoff=.05) { # group + gid
     #{{{
-    te = tibble()
-    for (tag1 in unique(tge$tag)) {
-        gids = tge %>% filter(tag == tag1) %>% pull(gid)
-        te1 = go_enrich_gosets(gids, pval.cutoff = pval.cutoff) %>% mutate(tag = tag1) %>%
-            select(tag, everything())
-        te = rbind(te, te1)
-    }
-    te
+    tg = tg %>% filter(gid %in% tgrp$gid)
+    tgs = tg %>% count(group) %>% filter(n >= 3) %>% select(-n)
+    tg = tg %>% filter(group %in% tgs$group)
+    tg %>% group_by(group) %>%
+        summarise(ng = length(gid), gids = list(gid)) %>% ungroup() %>%
+        mutate(data = map(gids, hyper_enrich, tgrp=tgrp)) %>%
+        mutate(n_group = nrow(tgs)) %>%
+        #filter(!is.na(data)) %>% filter(!is.null(data)) %>%
+        select(n_group, group, ng, data) %>% unnest() %>%
+        mutate(pval.adj = p.adjust(pval.raw, method=method)) %>%
+        #filter(pval.adj < pval.cutoff) %>%
+        arrange(pval.adj)
     #}}}
 }
 

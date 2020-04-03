@@ -4,7 +4,7 @@
 \alias{genome_dir}
 \title{Get system path to genome directory}
 \usage{
-genome_dir(genome = "", root = "~/data/genome")
+genome_dir(genome = "", root = "~/projects/genome/data")
 }
 \description{
 Get system path to genome directory

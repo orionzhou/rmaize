@@ -4,7 +4,7 @@
 \alias{read_genome_conf}
 \title{Read Genome Configuration}
 \usage{
-read_genome_conf(genome, dirg = "~/data/genome")
+read_genome_conf(genome = "Zmays_B73", dirg = "~/projects/genome/data")
 }
 \description{
 Read Genome Configuration

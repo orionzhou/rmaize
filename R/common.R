@@ -3,12 +3,39 @@
 #' @export
 desc_stat <- function(x) {
     #{{{
+    if(typeof(x) == 'list') x = x %>% pull(1)
     x = x[!is.na(x)]
-    tibble(q0 = quantile(x,0), q5=quantile(x,.05), q25=quantile(x,.25),
-           q50 = quantile(x,.5), q75=quantile(x,.75), q95=quantile(x,.95),
-           q100 = quantile(x,1), mean=mean(x), sd=sd(x),
-           iqr = IQR(x), mad=mad(x))
+    tibble(statK = c('q0','q5','q25','q50','q75','q95','q100',
+                     'avg','sd','iqr','mad'),
+           statV = c(map_dbl(c(0,.05,.25,.5,.75,.95,1), .f <- function(y) quantile(x,y)),
+                     mean(x), sd(x), IQR(x), mad(x)))
     #}}}
+}
+
+#' Get summary statistics for the 2nd+ columns of a tibble
+#'
+#' @export
+sum_stat_tibble <- function(ti) {
+    #{{{
+    statks = colnames(ti)[-1]
+    to = ti %>% rename(sid = 1) %>%
+        gather(stat, v, -sid) %>%
+        mutate(stat = factor(stat, levels=statks)) %>%
+        group_by(stat) %>%
+        summarise(n=n(), q0=quantile(v,0), q5=quantile(v,.05), q25=quantile(v,.25),
+            q50=quantile(v,.5), q75=quantile(v,.75), q95=quantile(v,.95),
+            q100=quantile(v,1), avg=mean(v), std=sd(v),
+            iqr=IQR(v), mad=mad(v)) %>% ungroup()
+    to
+    #}}}
+}
+
+#' get most frequent item in a vector
+#'
+#' @export
+Mode <- function(x) {
+    ux <- unique(x)
+    ux[which.max(tabulate(match(x, ux)))]
 }
 
 .ls.objects <- function(pos=1, pattern, order.by, decreasing=F, head=F, n=5) {

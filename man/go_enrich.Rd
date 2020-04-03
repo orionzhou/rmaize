@@ -4,7 +4,7 @@
 \alias{go_enrich}
 \title{Perform GO enrichment analysis using hypergeometric test}
 \usage{
-go_enrich(gids, tg)
+go_enrich(gids, tgo)
 }
 \description{
 Perform GO enrichment analysis using hypergeometric test

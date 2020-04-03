@@ -6,10 +6,86 @@ options(scipen=999)
 make_tile <- function(cbeg, cend, winsize = 10, winstep = 5) {
     #{{{
     size = cend - cbeg + 1
-    nwin = ceil((size - winsize) / winstep) + 1
+    nwin = ceiling((size - winsize) / winstep) + 1
     tibble(beg = cbeg + winstep * (1:nwin-1),
            end = cbeg + winstep * (1:nwin-1) + winsize - 1) %>%
         mutate(beg = as.integer(beg), end = as.integer(pmin(end, cend)))
+    #}}}
+}
+
+#' liftOver
+#'
+#' @export
+liftover <- function(t1, fc, pct=.001) {
+    #{{{
+    t1 = t1 %>% mutate(i=1:n())
+    t2 = t1 %>% arrange(chrom, start, end) %>%
+        select(chrom, start, end, i)
+    #
+    fbd = 'xtest1.bed'
+    fres = 'xout.bed'
+    #
+    write_tsv(t2, fbd, col_names=F)
+    system(sprintf("liftOver -minMatch=%s %s %s %s unmap", pct, fbd, fc, fres))
+    #
+    t3 = read_tsv(fres, col_names=F) %>%
+        rename(chrom2=1,start2=2,end2=3,i=4) %>% mutate()
+    system(sprintf("rm %s %s unmap", fbd, fres))
+    #
+    to = t1 %>% left_join(t3, by=c('i'))
+    to
+    #}}}
+}
+
+#' bedtools intersect
+#'
+#' @export
+intersect_s <- function(t1, t2, bp_pct=1e-9) {
+    #{{{
+    t1 = t1 %>% arrange(chrom, start, end)
+    t2 = t2 %>% arrange(chrom, start, end)
+    #
+    fbd1 = 'xtest1.bed'
+    fbd2 = 'xtest2.bed'
+    fres = 'xout.bed'
+    options(scipen = 999)
+    write_tsv(t1, fbd1, col_names=F)
+    write_tsv(t2, fbd2, col_names=F)
+    #
+    options(scipen = 0)
+    system(sprintf("intersectBed -f %s -a %s -b %s > %s", bp_pct, fbd1, fbd2, fres))
+    #
+    t3 = read_tsv(fres, col_names=colnames(t1))
+    system(sprintf("rm %s %s %s", fbd1, fbd2, fres))
+    t3
+    #}}}
+}
+
+#' bedtools intersect
+#'
+#' @export
+intersect_once <- function(t1, t2, bp_pct=1) {
+    #{{{
+    t1 = t1 %>% arrange(chrom, start, end) %>% select(chrom,start,end) %>%
+        mutate(i = 1:n())
+    t2 = t2 %>% arrange(chrom, start, end)
+    #
+    fbd1 = 'xtest1.bed'
+    fbd2 = 'xtest2.bed'
+    fres = 'xout.bed'
+    options(scipen = 999)
+    write_tsv(t1, fbd1, col_names=F)
+    write_tsv(t2, fbd2, col_names=F)
+    #
+    options(scipen = 0)
+    system(sprintf("intersectBed -u -f %s -a %s -b %s > %s", bp_pct, fbd1, fbd2, fres))
+    #
+    t3 = read_tsv(fres, col_names=F) %>% select(chrom=1,start=2,end=3,i=4) %>% mutate(hit=T)
+    system(sprintf("rm %s %s %s", fbd1, fbd2, fres))
+    #
+    t4 = t1 %>% left_join(t3, by=c('chrom','start','end','i')) %>%
+        replace_na(list(hit=F))
+    t4 %>% pull(hit)
     #}}}
 }
 

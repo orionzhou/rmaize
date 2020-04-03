@@ -7,9 +7,9 @@ args <- parser$parse_args()
 fi = args$fi
 stopifnot(file.exists(fi))
 
-require(tidyverse) 
-require(rmarkdown) 
-require(knitr) 
-require(kableExtra) 
+#require(tidyverse)
+require(rmarkdown)
+require(knitr)
+require(kableExtra)
 
 rmarkdown::render(fi, clean = T)
