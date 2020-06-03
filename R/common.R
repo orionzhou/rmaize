@@ -79,4 +79,17 @@ sortC <- function(...) {
     #}}}
 }
 
-
+#' a unified distance function with custome methods
+#'
+#' @export
+idist <- function(m, method='euclidean', ...) {
+    #{{{ be default clusters by column
+    if( method %in% c("euclidean", "maximum", "manhattan", "canberra", "binary", "minkowski") ) {
+        dist(t(m), method = method, ...)
+    } else if(method %in% c("pearson",'spearman','kendall')) {
+        as.dist(1-cor(m, method = method, ...))
+    } else {
+        stop("unsupported dist method: \n", method)
+    }
+    #}}}
+}

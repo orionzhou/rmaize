@@ -144,7 +144,7 @@ readcount_norm <- function(t_rc, t_gs = F) {
         tm = tm %>% inner_join(smMap, by=c('SampleID'='nSampleID')) %>%
             dplyr::select(-SampleID) %>% dplyr::select(SampleID=oSampleID, everything())
     }
-    list(tl = tl, tm = tm)
+    list(tl = tl, tm = tm, dds=dds)
     #}}}
 }
 
@@ -261,12 +261,35 @@ plot_tsne <- function(tm, th, min.value=1, pct.exp=.5, perp=6, iter=1200,
     #}}}
 }
 
+#' plot umap
+#'
+#' @export
+plot_umap <- function(tm, th, min.value=1, pct.exp=.5,
+                      seed=42, ...) {
+    #{{{ UMAP
+    require(umap)
+    tw = tm %>% select(SampleID, gid, value) %>%
+        filter(SampleID %in% th$SampleID) %>% spread(SampleID, value)
+    t_exp = tm %>% group_by(gid) %>% summarise(n.exp = sum(value>=min.value))
+    gids = t_exp %>% filter(n.exp >= (ncol(tw)-1) * pct.exp) %>% pull(gid)
+    tt = tw %>% filter(gid %in% gids)
+    res <- umap(t(as.matrix(tt[-1])), random_state = seed)
+    #
+    tp = res$layout %>% as.data.frame() %>% as_tibble() %>%
+        rename(x=1, y=2) %>%
+        add_column(SampleID = colnames(tt)[-1]) %>%
+        inner_join(th, by = 'SampleID')
+    plot_clustering_2d(tp, xtitle='UMAP-1', ytitle='UMAP-2', ...)
+    #}}}
+}
+
+
 plot_clustering_2d <- function(tp, xtitle='PC1', ytitle='PC2',
     var.lab='lab', var.col='', var.shape='', var.ellipse='',
-    leg.col=T, leg.shape=T,
+    shapes = 0:10, leg.col=T, leg.shape=T,
     legend.pos='top.right', legend.dir='v', legend.box='v', legend.title=T,
     point.size=2, lab.size=2, pal.col='aaas') {
-    #{{{ tSNE
+    #{{{
     x.max=max(tp$x)
     p = ggplot(tp, aes(x,y))
     # point shape and color aesthetics
@@ -277,11 +300,11 @@ plot_clustering_2d <- function(tp, xtitle='PC1', ytitle='PC2',
             get(str_c('scale_color', pal.col, sep="_"))(name=var.col)
     else if(var.shape != '' & var.col == '')
         p = p + geom_point(aes(shape=get(var.shape)), size=point.size) +
-            scale_shape_manual(name=var.shape, values = c(0:10))
+            scale_shape_manual(name=var.shape, values = shapes)
     else
         p = p + geom_point(aes(color=get(var.col), shape=get(var.shape)), size=point.size) +
             get(str_c('scale_color', pal.col, sep="_"))(name=var.col) +
-            scale_shape_manual(name=var.shape, values = c(0:10))
+            scale_shape_manual(name=var.shape, values = shapes)
     # ellipse
     if (var.ellipse != '')
         p = p + geom_mark_ellipse(aes(fill=get(var.ellipse)),
@@ -301,9 +324,13 @@ plot_clustering_2d <- function(tp, xtitle='PC1', ytitle='PC2',
         theme(axis.ticks.length = unit(0, 'lines')) +
         guides(fill=F)
     if (!leg.col)
-        p =  p + guides(color=F)
+        p = p + guides(color=F)
+    else
+        p = p# + guides(color=guide_legend(nrow=1, byrow=T))
     if (!leg.shape)
-        p =  p + guides(shape=F)
+        p = p + guides(shape=F)
+    else
+        p = p# + guides(shape=guide_legend(nrow=1, byrow=T))
     p
     #}}}
 }
@@ -335,5 +362,47 @@ plot_ase <- function(ta, th, min_rc=20, drc='h',
     p
     #}}}
 }
+
+#' plot RIL haplotype blocks
+#'
+#' @export
+plot_ril_genotype <- function(cp, th, sids_red='', gts=c('B73','Mo17','het')) {
+#{{{ RIL genotype
+    fw = '~/projects/genome/data/Zmays_B73/15_intervals/20.win11.tsv'
+    tw = read_tsv(fw)
+    offs = c(0, cumsum(tw$size)[-nrow(tw)]) + 0:10 * 10e6
+    tx = tw %>% mutate(off = offs) %>%
+        mutate(gstart=start+off, gend=end+off, gpos=(gstart+gend)/2) %>%
+        select(rid,chrom,gstart,gend,gpos,off) %>% filter(chrom!='B99')
+    #
+    tp = cp %>% inner_join(tx, by='rid') %>%
+        mutate(start=start+off, end=end+off) %>%
+        inner_join(th, by=c('sid'='SampleID'))
+    tz = cp %>% mutate(size=end-start) %>% group_by(sid, gt) %>%
+        summarise(size = sum(size)) %>%
+        mutate(total_size = sum(size)) %>%
+        mutate(prop = size / total_size) %>% ungroup() %>%
+        select(sid, gt, prop) %>% spread(gt, prop) %>%
+        replace_na(list(a=0,b=0,h=0))
+    ty = tp %>% distinct(sid, lab) %>% arrange(desc(lab)) %>%
+        mutate(y = 1:n()) %>%
+        mutate(col = ifelse(sid %in% sids_red, 'red','black')) %>%
+        inner_join(tz, by='sid') %>%
+        mutate(lab=sprintf("%s (%.1f%%)", lab, a*100))
+    tp = tp %>% inner_join(ty, by=c('sid'))
+    #
+    xmax = max(tp$end)
+    p = ggplot(tp) +
+        geom_rect(aes(xmin=start,xmax=end,ymin=y-.3,ymax=y+.3, fill=gt)) +
+        #geom_text(data=ty, aes(x=xmax+5e6, y=y, label=lab), hjust=0, size=2.5) +
+        scale_x_continuous(breaks=tx$gpos, labels=tx$chrom, expand=expansion(mult=c(.01,.01))) +
+        scale_y_continuous(breaks=ty$y, labels=ty$lab, expand=expansion(mult=c(.002,.002))) +
+        scale_fill_manual(values=pal_simpsons()(8)[c(1,2,5)], labels=gts) +
+        otheme(legend.pos='top.center.out', legend.dir='h',
+               xtext=T, xtick=T, ytext=T, ytick=T) +
+        theme(axis.text.y = element_text(color=ty$col, size=7))
+#}}}
+}
+
 
 

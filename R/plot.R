@@ -176,7 +176,7 @@ plot_hist <- function(x, fo='~/tmp.pdf', xlab='xlab', ylab='count') {
 #' @export
 cmp_proportion1 <- function(ti, xtitle='', ytitle='', xangle=0, margin.l=.1,
     legend.pos='top.center.out', legend.dir='h', legend.title='', barwidth=.8,
-    oneline=F, expand.x=c(.01,.01), expand.y=c(.01,.04), pal='Pastel2') {
+    oneline=F, expand.x=c(.01,.01), expand.y=c(.01,.04), pal='npg') {
     #{{{
     tags1 = levels(ti$tag1)
     tags2 = levels(ti$tag2)
@@ -193,17 +193,16 @@ cmp_proportion1 <- function(ti, xtitle='', ytitle='', xangle=0, margin.l=.1,
         mutate(tag2 = factor(tag2, levels=tags2))
     tpx = tp %>% group_by(tag1) %>% summarise(n=number(sum(n))) %>% ungroup()
     pp = ggplot(tp) +
-        geom_bar(aes(x=tag1,y=prop,fill=tag2), stat='identity', position='fill', width=barwidth) +
+        geom_bar(aes(x=tag1,y=prop,fill=tag2), stat='identity', position='fill', width=barwidth, alpha=.8) +
         geom_text(aes(x=tag1,y=y,label=lab),color=col1,size=2.5,lineheight=.8) +
         geom_text(data=tpx, aes(tag1,1.01,label=n), color=col2,size=3, vjust=0) +
-        scale_x_discrete(name=xtitle, expand=expand_scale(mult=expand.x)) +
-        scale_y_continuous(name=ytitle, expand=expand_scale(mult=expand.y)) +
-        scale_fill_brewer(name=legend.title, palette=pal) +
+        scale_x_discrete(name=xtitle, expand=expansion(mult=expand.x)) +
+        scale_y_continuous(name=ytitle, expand=expansion(mult=expand.y)) +
+        get(str_c('scale_fill', pal, sep="_"))(name=legend.title) +
         otheme(legend.pos=legend.pos,legend.dir=legend.dir,
                legend.title=legend.title, legend.vjust=.2,
             xtick=T, ytick=F, xtitle=T, xtext=T, ytext=F, panel.border=F,
-            margin = c(.1, .1, .1, margin.l)) +
-        guides(fill = guide_legend(nrow=1))
+            margin = c(.1, .1, .1, margin.l))
     if(xangle != 0) pp = pp + theme(axis.text.x=element_text(angle=xangle, hjust=1,vjust=1))
     pp
     #}}}
@@ -234,9 +233,9 @@ cmp_proportion <- function(ti, xtitle='', ytitle='', xangle=0, margin.l=.1,
         geom_bar(aes(x=tag1,y=prop,fill=tag2), stat='identity', position='fill', width=barwidth) +
         geom_text(aes(x=tag1,y=y,label=lab),color=col1,size=2.5,lineheight=.8) +
         geom_text(data=tpx, aes(tag1,1.01,label=n), color=col2,size=3, vjust=0) +
-        scale_x_discrete(name=xtitle, expand=expand_scale(mult=expand.x)) +
-        scale_y_continuous(name=ytitle, expand=expand_scale(mult=expand.y)) +
-        scale_fill_brewer(name=legend.title, palette=pal) +
+        scale_x_discrete(name=xtitle, expand=expansion(mult=expand.x)) +
+        scale_y_continuous(name=ytitle, expand=expansion(mult=expand.y)) +
+        get(str_c('scale_fill', pal, sep="_"))(name=legend.title) +
         facet_wrap(~pnl, ncol=nc) +
         otheme(legend.pos=legend.pos,legend.dir=legend.dir,
                legend.title=legend.title, legend.vjust=-.3,
