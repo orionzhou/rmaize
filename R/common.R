@@ -82,12 +82,14 @@ sortC <- function(...) {
 #' a unified distance function with custome methods
 #'
 #' @export
-idist <- function(m, method='euclidean', ...) {
+idist <- function(m, opt='row', method='euclidean', ...) {
     #{{{ be default clusters by column
     if( method %in% c("euclidean", "maximum", "manhattan", "canberra", "binary", "minkowski") ) {
-        dist(t(m), method = method, ...)
+        m2 = if (opt == 'row') m else t(m)
+        dist(m2, method = method, ...)
     } else if(method %in% c("pearson",'spearman','kendall')) {
-        as.dist(1-cor(m, method = method, ...))
+        m2 = if (opt == 'row') t(m) else m
+        as.dist(1-cor(m2, method = method, ...))
     } else {
         stop("unsupported dist method: \n", method)
     }

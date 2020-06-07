@@ -21,7 +21,9 @@ Depends: R (>= 3.5.1),
     showtext,
     ggpubr,
     googledrive,
-    googlesheets4
+    googlesheets4,
+    ggforce,
+    ggtext
 Imports:
     GGally,
     scales,
