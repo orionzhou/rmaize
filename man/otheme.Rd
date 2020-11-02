@@ -5,8 +5,9 @@
 \title{flexible custom ggplot theme}
 \usage{
 otheme(
-  strip.size = 8,
   margin = c(0.5, 0.5, 0.5, 0.5),
+  strip.size = 8,
+  strip.style = "dark",
   legend.pos = "",
   legend.dir = "v",
   legend.box = "v",

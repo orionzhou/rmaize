@@ -6,8 +6,8 @@
 \usage{
 read_gspread_master(
   book = "maize_studies",
-  sheet = 1,
-  lib = "rnaseq",
+  sheet = "all",
+  lib = "",
   cred = "~/.config/google_account_token.json"
 )
 }

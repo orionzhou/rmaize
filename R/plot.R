@@ -66,10 +66,28 @@ get_density <- function(x, y, ...) {
     #}}}
 }
 
+#' use hclust to order matrix rows
+#'
+#' @export
+hc_order_row <- function(ti, cor.opt='euclidean', hc.opt='ward.D') {
+    #{{{ gid followed by 2+ value columns
+    e = ti %>% rename(gid = 1) %>% select(-gid) %>% as.data.frame()
+    rownames(e) = ti$gid
+    if(nrow(ti) <= 1) {
+        ti$gid
+    } else {
+        edist = idist(e, opt='row', method=cor.opt)
+        ehc = hclust(edist, method = hc.opt)
+        ehc$labels[ehc$order]
+    }
+    #}}}
+}
+
 #' flexible custom ggplot theme
 #'
 #' @export
-otheme <- function(strip.size = 8, margin = c(.5,.5,.5,.5),
+otheme <- function(margin = c(.5,.5,.5,.5),
+                   strip.size = 8, strip.style = 'white', strip.compact = F,
                    legend.pos='', legend.dir='v', legend.box='v', legend.vjust=NA,
                    legend.title = F, legend.border = F,
                    panel.border = T, panel.spacing = .02,
@@ -78,10 +96,25 @@ otheme <- function(strip.size = 8, margin = c(.5,.5,.5,.5),
                    xsize = 8, ysize = 8, nostrip = T) {
     #{{{ custom theme
     o = theme_bw()
-    if(nostrip) o = o +
-        theme(strip.background = element_blank(),
-              strip.text = element_text(size = strip.size,
-                                        margin = margin(.05,.05,.05,.05,'lines')))
+    #{{{ strip style
+    strip.color = ifelse(strip.style=='dark', 'white', 'black')
+    strip.fill = ifelse(strip.style=='dark', '#5D729D', 'white')
+    strip.box.color = ifelse(strip.style=='dark', '#4A618C', '#4A618C')
+    if(strip.style == 'dark') {
+        o = o +
+            theme(strip.background = element_blank(),
+                  strip.text = element_textbox(size = strip.size,
+                  color = strip.color, fill = strip.fill, box.color = strip.box.color,
+                  halign=.5, linetype = 1, r = unit(5, "pt"), width = unit(1, "npc"),
+                  padding = margin(2, 0, 1, 0), margin = margin(.05, .05, .05, .05)))
+    } else {
+        o = o +
+            theme(strip.background = element_blank(),
+                  strip.text = element_text(size = strip.size))
+        if(strip.compact)
+            o = o + theme(strip.text=element_text(margin=margin(.05,.05,.05,.05)))
+    }
+    #}}}
     #{{{ legend
     o = o +
         theme(legend.background = element_blank(),
@@ -154,9 +187,42 @@ otheme <- function(strip.size = 8, margin = c(.5,.5,.5,.5),
     if(!panel.border)
         o = o + theme(panel.border = element_blank())
     #}}}
-    o + theme(plot.margin = unit(margin, "lines"))
+    o + theme(plot.margin = unit(margin, "lines")) +
+        theme(title=element_text(margin=margin(0,0,0,0,'cm')))
     #}}}
 }
+
+#' remove x axis
+#'
+#' @export
+no_x_axis <- function(title=F,text=F,tick=F) {
+    #{{{
+    p = theme()
+    if(!title) p = p + theme(axis.title.x=element_blank())
+    if(!text) p = p + theme(axis.text.x=element_blank())
+    if(!tick) p = p + theme(axis.ticks.x=element_blank())
+    p
+    #}}}
+}
+
+#' remove y axis
+#'
+#' @export
+no_y_axis <- function(title=F,text=F,tick=F) {
+    #{{{
+    p = theme()
+    if(!title) p = p + theme(axis.title.y=element_blank())
+    if(!text) p = p + theme(axis.text.y=element_blank())
+    if(!tick) p = p + theme(axis.ticks.y=element_blank())
+    p
+    #}}}
+}
+
+#' margin
+#'
+#' @export
+o_margin <- function(t=.2, r=.2, b=.2, l=.2)
+  theme(plot.margin = margin(t, r, b, l, 'lines'))
 
 #' quick plot histogram
 #
@@ -213,7 +279,7 @@ cmp_proportion1 <- function(ti, xtitle='', ytitle='', xangle=0, margin.l=.1,
 #' @export
 cmp_proportion <- function(ti, xtitle='', ytitle='', xangle=0, margin.l=.1,
     legend.pos='top.center.out', legend.dir='h', legend.title='', barwidth=.8,
-    oneline=F, expand.x=c(.01,.01), expand.y=c(.01,.04), pal='Pastel2', nc=5) {
+    oneline=F, expand.x=c(.01,.01), expand.y=c(.01,.04), pal='d3', nc=5) {
     #{{{
     tags1 = levels(ti$tag1)
     tags2 = levels(ti$tag2)
@@ -238,7 +304,7 @@ cmp_proportion <- function(ti, xtitle='', ytitle='', xangle=0, margin.l=.1,
         get(str_c('scale_fill', pal, sep="_"))(name=legend.title) +
         facet_wrap(~pnl, ncol=nc) +
         otheme(legend.pos=legend.pos,legend.dir=legend.dir,
-               legend.title=legend.title, legend.vjust=-.3,
+               legend.title=legend.title, legend.vjust=-.3, panel.spacing=.2,
             xtick=T, ytick=F, xtitle=T, xtext=T, ytext=F,
             margin = c(.1, .1, .1, margin.l))
     if(xangle != 0) pp = pp + theme(axis.text.x=element_text(angle=xangle, hjust=1,vjust=1))

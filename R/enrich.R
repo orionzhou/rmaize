@@ -16,7 +16,7 @@ if (FALSE) {
 #' Read GO annotation for B73 AGP_v4
 #'
 #' @export
-read_go <- function(src = 'uniprot.plants', fgo = '~/projects/genome/data/Zmays_B73/61_functional/01.go.tsv') {
+read_go <- function(src = 'uniprot.plants', fgo = '~/projects/genome/data2/Zmays_B73/61_functional/01.go.tsv') {
     #{{{
     ti = read_tsv(fgo)
     if(src == 'all')
@@ -113,8 +113,31 @@ hyper_enrich_m <- function(tg, tgrp, method='BH', pval.cutoff=.05) { # group + g
     #}}}
 }
 
-#fisher.test(matrix(c(hitInSample, hitInPop-hitInSample, sampleSize-hitInSample, failInPop-sampleSize +hitInSample), 2, 2), alternative='two.sided')
-
+#' Generic function to perform hypergeometric/fisher exact test for enrichment
+#'
+#' @export
+test_enrich <- function(hitInSample, sampleSize, hitInPop, popSize,
+                        deplete=F, method='phyper') {
+    #{{{
+    if(method == 'phyper') {
+        if(deplete) {
+            phyper(hitInSample, hitInPop, popSize-hitInPop, sampleSize, lower.tail=T)
+        } else {
+            phyper(hitInSample-1, hitInPop, popSize-hitInPop, sampleSize, lower.tail=F)
+        }
+    } else if (method == 'fet') {
+        mat = matrix(c(hitInSample, hitInPop-hitInSample, sampleSize-hitInSample,
+                       popSize-hitInPop-sampleSize+hitInSample), 2, 2)
+        if(deplete) {
+            fisher.test(mat, alternative='less')$p.value
+        } else {
+            fisher.test(mat, alternative='greater')$p.value
+        }
+    } else {
+        stop("unknown test method:", method)
+    }
+    #}}}
+}
 
 
 

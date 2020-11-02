@@ -5,7 +5,8 @@
 \title{Read maize v3 to v4 gene ID mapping}
 \usage{
 v3_to_v4(
-  fm = "~/data/genome/Zmays_B73/gene_mapping/maize.v3TOv4.geneIDhistory.txt"
+  fm = "~/projects/genome/data2/Zmays_B73/gene_mapping/maize.v3TOv4.geneIDhistory.txt",
+  opt = "tibble"
 )
 }
 \description{

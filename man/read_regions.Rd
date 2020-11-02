@@ -4,7 +4,7 @@
 \alias{read_regions}
 \title{Get maize ACR}
 \usage{
-read_regions(opt = "umr")
+read_regions(opt = "umr", dirw = "~/projects/genome/data2/Zmays_B73/chromatin")
 }
 \description{
 Get maize ACR

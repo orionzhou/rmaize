@@ -5,13 +5,14 @@ Authors@R: person("Peng", "Zhou", email = "zhoupenggeni@gmail.com", role = c("au
 Description: An R package for common bioinformatic tasks
 License: BSD 2-Clause License
 LazyData: true
-RoxygenNote: 7.1.0
+RoxygenNote: 7.1.1
 Depends: R (>= 3.5.1),
     tidyverse,
+    tidymodels,
     readxl,
-    scales,
     grid,
     rlang,
+    glue,
     gtable,
     RColorBrewer,
     viridis,
@@ -20,13 +21,7 @@ Depends: R (>= 3.5.1),
     ggsci,
     showtext,
     ggpubr,
-    googledrive,
-    googlesheets4,
     ggforce,
     ggtext
 Imports:
-    GGally,
-    scales,
-    tidytree,
-    Hmisc,
-    yaml
+    scales

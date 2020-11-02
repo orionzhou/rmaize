@@ -4,7 +4,11 @@
 \alias{rnaseq_cpm_raw}
 \title{read one RNA-Seq study result (raw)}
 \usage{
-rnaseq_cpm_raw(yid, diri = "~/projects/rnaseq/data/11_qc")
+rnaseq_cpm_raw(
+  yid,
+  diri = "~/projects/rnaseq/data/11_qc",
+  genome = "Zmays_B73"
+)
 }
 \description{
 read one RNA-Seq study result (raw)

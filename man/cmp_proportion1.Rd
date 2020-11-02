@@ -17,7 +17,7 @@ cmp_proportion1(
   oneline = F,
   expand.x = c(0.01, 0.01),
   expand.y = c(0.01, 0.04),
-  pal = "Pastel2"
+  pal = "npg"
 )
 }
 \description{

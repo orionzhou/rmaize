@@ -4,7 +4,7 @@
 \alias{read_symbol}
 \title{Get maize gene symbols}
 \usage{
-read_symbol(opt = 1)
+read_symbol(opt = "dict")
 }
 \description{
 Get maize gene symbols

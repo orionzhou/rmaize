@@ -1,3 +1,15 @@
+#' read project meta table
+#'
+#' @export
+read_projects <- function(genome='Zmays_B73', diri = '~/projects/barn') {
+    #{{{
+    gdic = c('Athaliana' = 'arabidopsis', 'Osativa' = 'rice', 'Zmays_B73' = 'maize')
+    stopifnot(genome %in% names(gdic))
+    org = gdic[genome]
+    read_xlsx(glue("{diri}/{org}.xlsx"))
+    #}}}
+}
+
 #' get RNA-Seq sample meta table
 #'
 #' @export
@@ -58,9 +70,10 @@ rnaseq_mapping_stat <- function(yid, dird='~/projects/rnaseq/data') {
 #' read one RNA-Seq study result (raw)
 #'
 #' @export
-rnaseq_cpm_raw <- function(yid, diri='~/projects/rnaseq/data/11_qc') {
+rnaseq_cpm_raw <- function(yid, genome='Zmays_B73', diri='~/projects/rnaseq/data/11_qc') {
     #{{{
-    fi = sprintf("%s/%s/00.raw.rds", diri, yid)
+    fi = sprintf("%s/%s/%s/00.raw.rds", diri, genome, yid)
+    cat(fi,'\n')
     stopifnot(file.exists(fi))
     readRDS(fi)
     #}}}
@@ -69,11 +82,50 @@ rnaseq_cpm_raw <- function(yid, diri='~/projects/rnaseq/data/11_qc') {
 #' read one RNA-Seq study result (final)
 #'
 #' @export
-rnaseq_cpm <- function(yid, diri='~/projects/rnaseq/data/11_qc') {
+rnaseq_cpm <- function(yid, diri='~/projects/rnaseq/data/11_qc', genome='Zmays_B73') {
     #{{{
-    fi = sprintf("%s/%s/01.rds", diri, yid)
+    fi = sprintf("%s/%s/%s/01.rds", diri, genome, yid)
     stopifnot(file.exists(fi))
     readRDS(fi)
+    #}}}
+}
+
+#' filter genes from an RNA-Seq dataset
+#'
+#' @export
+filter_expr <- function(ti, wide=F, min_cpm=1, num_sam_on=0, pct_sam_on=0,
+                        min_var_p=0, transform='no') {
+    #{{{
+    if (wide) ti = ti %>% gather(sid, val, -gid)
+    cat(glue("{length(unique(ti$gid))} genes in {length(unique(ti$sid))} samples read\n"), "\n")
+    #
+    sd2 <- function(x) sd(x[!(is.na(x) | is.infinite(x) | is.nan(x))])
+    tis = ti %>% group_by(gid) %>%
+        summarise(nsam_on = sum(abs(val) >= min_cpm),
+                  psam_on = nsam_on/n(),
+                  val_sd = sd2(val)) %>%
+        ungroup()
+    tis = tis %>% filter(nsam_on >= num_sam_on)
+    tis = tis %>% filter(psam_on >= pct_sam_on)
+    tis = tis %>% filter(val_sd > 0)
+    gids = tis %>% pull(gid)
+    #
+    tis2 = tis %>% filter(gid %in% gids)
+    min_sd = quantile(tis2$val_sd, min_var_p)
+    gids = tis2 %>% filter(val_sd >= as.numeric(min_sd)) %>% pull(gid)
+    #
+    to = ti %>% filter(gid %in% gids)
+    #
+    if (transform == 'asinh') {
+        to = to %>% mutate(val = asinh(val))
+    } else if (transform == 'log2') {
+        to = to %>% mutate(val = log2(val))
+    } else {
+        stopifnot(transform == 'no')
+    }
+    to = to %>% spread(sid, val)
+    cat(glue("{nrow(to)} genes passed filtering\n"), "\n")
+    to
     #}}}
 }
 
@@ -115,27 +167,32 @@ readcount_norm <- function(t_rc, t_gs = F) {
     t_nf = y$samples %>% as_tibble() %>%
         mutate(SampleID = rownames(y$samples)) %>%
         select(SampleID, libSize=lib.size, normFactor=norm.factors)
-    t_cpm = cpm(y) %>% as_tibble() %>% mutate(gid = rownames(cpm(y))) %>%
+    t_cpm1 = cpm(y) %>% as_tibble() %>% mutate(gid = rownames(cpm(y))) %>%
         select(gid, everything()) %>%
         gather(SampleID, CPM, -gid)
-    t_rcpm = cpm(y, normalized = F) %>% as_tibble() %>%
+    t_cpm2 = cpm(y, normalized = F) %>% as_tibble() %>%
         mutate(gid = rownames(cpm(y))) %>%
         gather(SampleID, rCPM, -gid)
+    t_cpm = t_cpm1 %>% inner_join(t_cpm2, by=c('SampleID','gid'))
     # rFPKM & FPKM
     if(is.list(t_gs)) {
+        t_tpm = tm %>% left_join(t_gs, by='gid') %>%
+            mutate(RPK = ReadCount / (size/1000)) %>%
+            group_by(SampleID) %>% mutate(rTPM = RPK / sum(RPK) * 1e6) %>%
+            ungroup() %>% inner_join(t_nf, by = 'SampleID') %>%
+            mutate(TPM = rTPM / normFactor) %>%
+            select(SampleID, gid, TPM, rTPM)
         t_cpm = t_cpm %>% left_join(t_gs, by = 'gid') %>%
             mutate(FPKM = CPM / (size / 1000)) %>%
-            select(-size)
-        t_rcpm = t_rcpm %>% left_join(t_gs, by = 'gid') %>%
             mutate(rFPKM = rCPM / (size / 1000)) %>%
-            select(-size)
+            select(-size) %>%
+            inner_join(t_tpm, by=c('SampleID','gid'))
     }
     #
     tl = th %>% inner_join(t_sf, by = 'SampleID') %>%
         inner_join(t_nf, by = 'SampleID')
     tm = tm %>%
         left_join(t_nrc, by = c('SampleID','gid')) %>%
-        left_join(t_rcpm, by = c('SampleID','gid')) %>%
         left_join(t_cpm, by = c('SampleID','gid'))
     stopifnot(nrow(tm) == length(gids) * nrow(th))
     if (! identical(smMap$oSampleID, smMap$nSampleID)) {
@@ -345,8 +402,10 @@ plot_ase <- function(ta, th, min_rc=20, drc='h',
         mutate(af = allele1/(allele1 + allele2)) %>%
         inner_join(th, by='SampleID') %>%
         mutate(lab = factor(lab, levels=rev(th$lab)))
-    tps = tp %>% count(lab) %>% mutate(labn=sprintf("%s (%s)", lab, number(n, big.mark = ",", accuracy=1))) %>%
-        arrange(lab)
+    tps = tp %>% group_by(lab) %>%
+        summarise(n=n(),af_avg = mean(af), af_med=median(af)) %>%
+        mutate(labn=sprintf("%s (%s)", lab, number(n, big.mark = ",", accuracy=1))) %>%
+        ungroup() %>% arrange(lab)
     #tp %>% group_by(lab) %>%
         #summarise(q50=median(af), m50=sum(allele1)/sum(allele1+allele2)) %>%
         #ungroup() %>% print(n=70)
@@ -354,9 +413,16 @@ plot_ase <- function(ta, th, min_rc=20, drc='h',
     p = ggboxplot(tp, x='lab', y='af', color=val.col, fill=val.fill,
                   orientation=ort, palette = pal.col,
                   outlier.shape = NA, bxp.errorbar = T) +
+    #p = ggplot(tp) +
+        #geom_violin(aes(x=lab, y=af, fill=get(val.fill)), color=val.col,
+                    #trim=F) +
+        #geom_segment(aes(x=match(lab, levels(lab))-0.1,
+                     #xend=match(lab, levels(lab))+0.1,
+                     #y=af, yend=af), color='white')+
         geom_hline(yintercept = .5, color='black',linetype='dashed') +
         scale_x_discrete(breaks=tps$lab, labels=tps$labn) +
         scale_y_continuous(name='% allele1',expand=expansion(mult=c(.02,.02))) +
+        #coord_flip() +
         otheme(xtext=T, ytext=T, xtick=T, ytick=T, xtitle=T) +
         guides(color=F, fill=F)
     p

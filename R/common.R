@@ -79,6 +79,11 @@ sortC <- function(...) {
     #}}}
 }
 
+#' set bound to a value/vector
+#'
+#' @export
+set_bound <- function(x, minV, maxV) min(max(x,minV),maxV)
+
 #' a unified distance function with custome methods
 #'
 #' @export
