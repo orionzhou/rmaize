@@ -119,7 +119,30 @@ filter_expr <- function(ti, wide=F, min_cpm=1, num_sam_on=0, pct_sam_on=0,
     if (transform == 'asinh') {
         to = to %>% mutate(val = asinh(val))
     } else if (transform == 'log2') {
-        to = to %>% mutate(val = log2(val))
+        to = to %>% mutate(val = sign(val) * log2(abs(val)+1))
+    } else if (transform == 'norm') {
+        tos = to %>% group_by(gid) %>%
+            summarise(minv = min(val)) %>% ungroup() %>%
+            mutate(off = ifelse(minv < 0, abs(minv), 0)) %>%
+            select(gid, off)
+        to = to %>% inner_join(tos, by='gid') %>% mutate(val=val+off) %>%
+            group_by(gid) %>%
+            mutate(val = val/mean(val)) %>% ungroup() %>%
+            select(gid, sid, val)
+    } else if (transform == 'vst') {
+        require(DESeq2)
+        #tos = to %>% group_by(gid) %>%
+            #summarise(minv = min(val)) %>% ungroup() %>%
+            #mutate(off = ifelse(minv < 0, abs(minv), 0)) %>%
+            #select(gid, off)
+        #to1 = to %>% inner_join(tos, by='gid') %>%
+            #mutate(val = round(val+off)+1) %>%
+            #select(-off) %>% spread(sid, val)
+        tow = to %>% mutate(val=round(val)) %>% spread(sid,val)
+        mat1 = as.matrix(tow %>% select(-gid))
+        mat2 = varianceStabilizingTransformation(mat1, fitType='local')
+        to = as_tibble(mat2) %>% mutate(gid=tow$gid) %>%
+            gather(sid,val,-gid) #select(gid, everything())
     } else {
         stopifnot(transform == 'no')
     }
@@ -343,7 +366,7 @@ plot_umap <- function(tm, th, min.value=1, pct.exp=.5,
 
 plot_clustering_2d <- function(tp, xtitle='PC1', ytitle='PC2',
     var.lab='lab', var.col='', var.shape='', var.ellipse='',
-    shapes = 0:10, leg.col=T, leg.shape=T,
+    shapes = pal_shapes(n=10), leg.col=T, leg.shape=T,
     legend.pos='top.right', legend.dir='v', legend.box='v', legend.title=T,
     point.size=2, lab.size=2, pal.col='aaas') {
     #{{{

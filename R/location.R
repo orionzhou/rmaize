@@ -321,3 +321,27 @@ intersect_gene <- function(gr1, gr2, cdsidx) {
     #}}}
 }
 
+#' bedtools merge
+#'
+#' @export
+bed_merge <- function(ti) {
+    #{{{
+    ti2 = ti %>% select(sid=1,start=2,end=3) %>% mutate(i = 1:n())
+    fbd1 = 'xtest1.bed'
+    fres = 'xout.bed'
+    options(scipen = 999)
+    write.table(ti2, fbd1, sep = "\t", row.names = F, col.names = F, quote = F)
+    options(scipen = 0)
+    system(glue("mergeBed -i {fbd1} -c 4 -o collapse > {fres}"))
+    #
+    t3 = read.table(fres, sep = "\t", header = F, as.is = T, quote = "")
+    colnames(t3) = c('chr', 'beg', 'end', 'i')
+    system(glue("rm {fbd1} {fres}"))
+    #
+    t4 = t3 %>% mutate(i = map(i, str_split, ",")) %>%
+        mutate(i = map(i, 1)) %>%
+        unnest(i) %>% mutate(i = as.integer(i))
+    t4
+    #}}}
+}
+

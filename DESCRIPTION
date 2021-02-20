@@ -21,6 +21,7 @@ Depends: R (>= 3.5.1),
     ggsci,
     showtext,
     ggpubr,
+    patchwork,
     ggforce,
     ggtext
 Imports:

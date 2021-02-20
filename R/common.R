@@ -12,6 +12,11 @@ desc_stat <- function(x) {
     #}}}
 }
 
+#' Modified standard deviation funciton after removing missing values
+#'
+#' @export
+sd2 <- function(x) sd(x[!(is.na(x) | is.infinite(x) | is.nan(x))])
+
 #' Get summary statistics for the 2nd+ columns of a tibble
 #'
 #' @export
@@ -95,6 +100,8 @@ idist <- function(m, opt='row', method='euclidean', ...) {
     } else if(method %in% c("pearson",'spearman','kendall')) {
         m2 = if (opt == 'row') t(m) else m
         as.dist(1-cor(m2, method = method, ...))
+    } else if (method == 'gower') {
+        as.dist(as.matrix(daisy(m, metric=method)))
     } else {
         stop("unsupported dist method: \n", method)
     }
