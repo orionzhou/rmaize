@@ -24,7 +24,7 @@ read_chrom_size <- function(genome='Zmays_B73', dirg = '~/projects/s3/zhoup-geno
 #' @export
 read_genome_conf <- function(genome='Zmays_B73', dirg = '~/projects/s3/zhoup-genome') {
     #{{{
-    fi = file.path(dirg, genome, '55.rds')
+    fi = glue("{dirg}/{genome}/55.rds")
     if(!file.exists(fi)) {
         stop(sprintf("cannot read %s\n", fi))
     } else {
@@ -36,7 +36,29 @@ read_genome_conf <- function(genome='Zmays_B73', dirg = '~/projects/s3/zhoup-gen
 #' laod txdb
 #'
 #' @export
-load_txdb <- function(org) loadDb(file.path('~/projects/s3/zhoup-genome', org, "50_annotation/10.sqlite"))
+load_txdb <- function(org, primary=F) {
+    #{{{
+    require(GenomicFeatures)
+    fn = ifelse(primary, '15', '10')
+    fd = glue('~/projects/s3/zhoup-genome/{org}/50_annotation/{fn}.sqlite')
+    if (! file.exists(fd) )
+        fd = glue('~/projects/s3/zhoup-genome/Zmays_{org}/50_annotation/{fn}.sqlite')
+    loadDb(fd)
+    #}}}
+}
+
+#' laod multiple txdbs
+#'
+#' @export
+load_txdbs <- function(orgs) {
+    #{{{
+    txdbs = list()
+    for (org in orgs) {
+        txdbs[[org]] = load_txdb(org)
+    }
+    txdbs
+    #}}}
+}
 
 #' Read maize v3 to v4 gene ID mapping
 #'
@@ -98,17 +120,17 @@ flattern_gcoord <- function(ti, tz) {
 #' Get maize gene symbols
 #'
 #' @export
-read_symbol <- function(opt='dict') {
+read_loci <- function(org='Zmays_B73', opt='tibble') {
     #{{{
-    fi = '~/projects/genome/data2/Zmays_B73/61_functional/00.symbols.tsv'
-    ti = read_tsv(fi)
+    fi = glue('~/projects/genome/data2/loci/{org}.tsv')
+    ti = read_tsv(fi, col_types='cccccccccc')
     if(opt == 'dict') {
         to = ti %>% select(gid, symbol) %>% filter(!is.na(gid))
         sdic = to$symbol
         names(sdic) = to$gid
         sdic
     } else {
-        ti %>% select(gid, symbol)
+        ti
     }
     #}}}
 }
@@ -138,6 +160,15 @@ read_syn <- function(gcfg, opt=1) {
         mutate(ftype = str_replace(ftype, "_", "-")) %>%
         mutate(ftype = factor(ftype, levels = ftypes))
     }
+    #}}}
+}
+
+#' Get maize gene tissue specificity scores
+#'
+#' @export
+read_tis_spec <- function(fi='~/projects/rnaseq/data/15_tissue_spec/10.tau.rds') {
+    #{{{
+    readRDS(fi)
     #}}}
 }
 

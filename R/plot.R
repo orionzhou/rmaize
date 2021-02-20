@@ -71,14 +71,20 @@ get_density <- function(x, y, ...) {
 #' @export
 hc_order_row <- function(ti, cor.opt='euclidean', hc.opt='ward.D') {
     #{{{ gid followed by 2+ value columns
-    e = ti %>% rename(gid = 1) %>% select(-gid) %>% as.data.frame()
+    ti = ti %>% rename(gid = 1)
+    e = ti %>% select(-gid) %>% as.data.frame()
     rownames(e) = ti$gid
     if(nrow(ti) <= 1) {
         ti$gid
     } else {
         edist = idist(e, opt='row', method=cor.opt)
         ehc = hclust(edist, method = hc.opt)
-        ehc$labels[ehc$order]
+        if (cor.opt == 'gower') {
+            labs = rownames(e)
+        } else {
+            labs = ehc$labels
+        }
+        labs[ehc$order]
     }
     #}}}
 }
@@ -90,6 +96,7 @@ otheme <- function(margin = c(.5,.5,.5,.5),
                    strip.size = 8, strip.style = 'white', strip.compact = F,
                    legend.pos='', legend.dir='v', legend.box='v', legend.vjust=NA,
                    legend.title = F, legend.border = F,
+                   legend.spacing.x = 0, legend.spacing.y = 0,
                    panel.border = T, panel.spacing = .02,
                    xticks = F, yticks = F, xtitle = F, ytitle = F,
                    xtext = F, ytext = F, xgrid = F, ygrid = F,
@@ -119,7 +126,10 @@ otheme <- function(margin = c(.5,.5,.5,.5),
     o = o +
         theme(legend.background = element_blank(),
               legend.key.size = unit(.8, 'lines'),
-              legend.text = element_text(size = 8))
+              legend.text = element_text(size = 8),
+              legend.spacing.x = unit(legend.spacing.x, "lines"),
+              legend.spacing.y = unit(legend.spacing.y, "lines"),
+              legend.margin = margin(.1,.1,.1,.1,'lines'))
     if(legend.title == F) {
         o = o + theme(legend.title = element_blank())
     } else {
@@ -240,9 +250,53 @@ plot_hist <- function(x, fo='~/tmp.pdf', xlab='xlab', ylab='count') {
 #' plot proportions of a set of categories
 #
 #' @export
-cmp_proportion1 <- function(ti, xtitle='', ytitle='', xangle=0, margin.l=.1,
+cmp_cnt1 <- function(ti, xtitle='', ytitle='', ytext=F, xangle=0,
+                     margin.l=.1, ypos='left',
     legend.pos='top.center.out', legend.dir='h', legend.title='', barwidth=.8,
-    oneline=F, expand.x=c(.01,.01), expand.y=c(.01,.04), pal='npg') {
+    oneline=F, expand.x=c(.02,.02), expand.y=c(.01,.04), fills=pal_npg()(8)) {
+    #{{{
+    tags1 = levels(ti$tag1)
+    tags2 = levels(ti$tag2)
+    sep = ifelse(oneline, " ", "\n")
+    col1 = 'black'; col2 = 'black'
+    tp = ti %>%
+        arrange(tag1, desc(tag2)) %>%
+        group_by(tag1) %>% mutate(n_tot = sum(n)) %>%
+        mutate(prop = n) %>%
+        mutate(y = cumsum(prop)) %>%
+        mutate(y = y - prop/2) %>%
+        mutate(lab = glue("{number(n,accuracy=1)}")) %>%
+        ungroup() %>%
+        mutate(tag2 = factor(tag2, levels=tags2))
+    tpx = tp %>% group_by(tag1) %>%
+        summarise(y=sum(n)*1.01, lab=number(sum(n))) %>% ungroup()
+    if (ypos == 'right') { tagm = tpx$tag1[nrow(tpx)] }
+    else { tagm = tpx$tag1[1] }
+    tpy = tp %>% filter(tag1==tagm)
+    pp = ggplot(tp) +
+        geom_bar(aes(x=tag1,y=prop,fill=tag2), stat='identity', position='stack', width=barwidth, alpha=.8) +
+        geom_text(aes(x=tag1,y=y,label=lab),color=col1,size=2.5,lineheight=.8) +
+        geom_text(data=tpx, aes(tag1,y,label=lab), color=col2,size=3, vjust=0) +
+        scale_x_discrete(name=xtitle, expand=expansion(mult=expand.x)) +
+        scale_y_continuous(name=ytitle, breaks=tpy$y, labels=tpy$tag2, expand=expansion(mult=expand.y), position=ypos) +
+        scale_fill_manual(name=legend.title, values=fills) +
+        otheme(legend.pos=legend.pos,legend.dir=legend.dir,
+               legend.title=legend.title, legend.vjust=.2,
+            xtick=T, ytick=!!ytext, xtitle=T, xtext=T, ytext=!!ytext, panel.border=F,
+            margin = c(.1, .1, .1, margin.l))
+    if(xangle != 0) pp = pp + theme(axis.text.x=element_text(angle=xangle, hjust=1,vjust=1))
+    pp
+    #}}}
+}
+
+#' plot proportions of a set of categories
+#
+#' @export
+cmp_proportion1 <- function(ti, xtitle='',ytitle='',ytext=F,xangle=0,
+                            margin.l=.1, ypos='left', alph=.8,
+    legend.pos='top.center.out', legend.dir='h', legend.title='', barwidth=.8,
+    lab.size=2.5, oneline=F, expand.x=c(.02,.02), expand.y=c(.01,.04),
+    fills=pal_npg()(8)) {
     #{{{
     tags1 = levels(ti$tag1)
     tags2 = levels(ti$tag2)
@@ -254,20 +308,24 @@ cmp_proportion1 <- function(ti, xtitle='', ytitle='', xangle=0, margin.l=.1,
         mutate(prop = n/n_tot) %>%
         mutate(y = cumsum(prop)) %>%
         mutate(y = y - prop/2) %>%
-        mutate(lab = str_c(number(n,accuracy=1), sep, '(', percent(prop,accuracy=1), ')')) %>%
+        mutate(lab = glue("{number(n,accuracy=1)}{sep}({percent(prop,accuracy=1)})")) %>%
         ungroup() %>%
         mutate(tag2 = factor(tag2, levels=tags2))
     tpx = tp %>% group_by(tag1) %>% summarise(n=number(sum(n))) %>% ungroup()
+    if (ypos == 'right') { tagm = tpx$tag1[nrow(tpx)] }
+    else { tagm = tpx$tag1[1] }
+    tpy = tp %>% filter(tag1==tagm)
     pp = ggplot(tp) +
-        geom_bar(aes(x=tag1,y=prop,fill=tag2), stat='identity', position='fill', width=barwidth, alpha=.8) +
-        geom_text(aes(x=tag1,y=y,label=lab),color=col1,size=2.5,lineheight=.8) +
-        geom_text(data=tpx, aes(tag1,1.01,label=n), color=col2,size=3, vjust=0) +
+        geom_bar(aes(x=tag1,y=prop,fill=tag2), alpha=alph, stat='identity', position='fill', width=barwidth) +
+        geom_text(aes(x=tag1,y=y,label=lab),color=col1,size=lab.size,lineheight=.8) +
+        geom_text(data=tpx, aes(tag1,1.01,label=n), color=col2,size=lab.size+.5, vjust=0) +
         scale_x_discrete(name=xtitle, expand=expansion(mult=expand.x)) +
-        scale_y_continuous(name=ytitle, expand=expansion(mult=expand.y)) +
-        get(str_c('scale_fill', pal, sep="_"))(name=legend.title) +
+        scale_y_continuous(name=ytitle, breaks=tpy$y, labels=tpy$tag2, expand=expansion(mult=expand.y), position=ypos) +
+        scale_fill_manual(name=legend.title, values=fills) +
         otheme(legend.pos=legend.pos,legend.dir=legend.dir,
                legend.title=legend.title, legend.vjust=.2,
-            xtick=T, ytick=F, xtitle=T, xtext=T, ytext=F, panel.border=F,
+            xtick=T, xtitle=T, xtext=T, ytext=!!ytext, ytick=!!ytext,
+            panel.border=F,
             margin = c(.1, .1, .1, margin.l))
     if(xangle != 0) pp = pp + theme(axis.text.x=element_text(angle=xangle, hjust=1,vjust=1))
     pp
@@ -279,7 +337,8 @@ cmp_proportion1 <- function(ti, xtitle='', ytitle='', xangle=0, margin.l=.1,
 #' @export
 cmp_proportion <- function(ti, xtitle='', ytitle='', xangle=0, margin.l=.1,
     legend.pos='top.center.out', legend.dir='h', legend.title='', barwidth=.8,
-    oneline=F, expand.x=c(.01,.01), expand.y=c(.01,.04), pal='d3', nc=5) {
+    alph=.8, oneline=F, lab.size=2.5, strip.compact=F,
+    expand.x=c(.02,.02), expand.y=c(.01,.04), nc=5, fills = pal_npg()(8)) {
     #{{{
     tags1 = levels(ti$tag1)
     tags2 = levels(ti$tag2)
@@ -291,24 +350,90 @@ cmp_proportion <- function(ti, xtitle='', ytitle='', xangle=0, margin.l=.1,
         mutate(prop = n/n_tot) %>%
         mutate(y = cumsum(prop)) %>%
         mutate(y = y - prop/2) %>%
-        mutate(lab = str_c(number(n), sep, '(', percent(prop,accuracy=1), ')')) %>%
+        mutate(lab = glue("{number(n,accuracy=1)}{sep}({percent(prop,accuracy=1)})")) %>%
         ungroup() %>%
         mutate(tag2 = factor(tag2, levels=tags2))
     tpx = tp %>% group_by(pnl, tag1) %>% summarise(n=number(sum(n))) %>% ungroup()
     pp = ggplot(tp) +
-        geom_bar(aes(x=tag1,y=prop,fill=tag2), stat='identity', position='fill', width=barwidth) +
-        geom_text(aes(x=tag1,y=y,label=lab),color=col1,size=2.5,lineheight=.8) +
-        geom_text(data=tpx, aes(tag1,1.01,label=n), color=col2,size=3, vjust=0) +
+        geom_bar(aes(x=tag1,y=prop,fill=tag2), alpha=alph, stat='identity', position='fill', width=barwidth) +
+        geom_text(aes(x=tag1,y=y,label=lab),color=col1,size=lab.size,lineheight=.8) +
+        geom_text(data=tpx, aes(tag1,1.01,label=n), color=col2,size=lab.size+.5, vjust=0) +
         scale_x_discrete(name=xtitle, expand=expansion(mult=expand.x)) +
         scale_y_continuous(name=ytitle, expand=expansion(mult=expand.y)) +
-        get(str_c('scale_fill', pal, sep="_"))(name=legend.title) +
+        scale_fill_manual(name=legend.title, values=fills) +
         facet_wrap(~pnl, ncol=nc) +
         otheme(legend.pos=legend.pos,legend.dir=legend.dir,
                legend.title=legend.title, legend.vjust=-.3, panel.spacing=.2,
-            xtick=T, ytick=F, xtitle=T, xtext=T, ytext=F,
+               strip.compact=!!strip.compact,
+            xtick=T, xtitle=T, xtext=T, ytext=F, ytick=F,
             margin = c(.1, .1, .1, margin.l))
     if(xangle != 0) pp = pp + theme(axis.text.x=element_text(angle=xangle, hjust=1,vjust=1))
     pp
+    #}}}
+}
+
+#' single-panel piechart
+#
+#' @export
+pie1 <- function(ti, fills=pal_npg()(8), lab.size=2.5, nudge.x=0, alph=.6) {
+    #{{{
+    tags = levels(ti$tag)
+   n_tot = sum(ti$n)
+    sep = " "
+    col1 = 'black'
+    tp = ti %>%
+        arrange(desc(tag)) %>%
+        mutate(prop = n/n_tot) %>%
+        mutate(y = cumsum(prop) - prop/2) %>%
+        mutate(lab = glue("{tag}\n{number(n,accuracy=1)}{sep}({percent(prop,accuracy=1)})"))
+    tit = glue("All ({number(n_tot, accurary=1)})")
+    ggplot(tp) +
+        geom_bar(aes(x='',y=prop,fill=tag), stat='identity',
+                 alpha=alph, color='white') +
+        coord_polar("y", start=0) +
+        geom_text_repel(aes(x='',y=y,label=lab),color=col1,size=lab.size,lineheight=.8,nudge_x=nudge.x) +
+        #scale_x_discrete(name=xtitle, expand=expansion(mult=expand.x)) +
+        #scale_y_continuous(name=ytitle, expand=expansion(mult=expand.y)) +
+        scale_fill_manual(values=fills) +
+        ggtitle(tit) +
+        otheme(legend.pos='none',
+               xtick=F, ytick=F, xtitle=F, xtext=F, ytext=F, panel.border=F) +
+        theme(plot.title=element_text(hjust=.5,size=9))
+    #}}}
+}
+
+#' multi-panel piechart
+#
+#' @export
+multi_pie <- function(ti, legend.pos='top.center.out', legend.dir='h',
+                      strip.compact=F, legend.title='', legend.vjust=.5,
+                      alph=.6, ncol=5, fills=pal_npg()(8)) {
+    #{{{
+    tags1 = levels(ti$tag1)
+    tags2 = levels(ti$tag2)
+    sep = " "
+    col1 = 'black'; col2 = 'black'
+    tp = ti %>%
+        arrange(tag1, desc(tag2)) %>%
+        group_by(tag1) %>% mutate(n_tot = sum(n)) %>%
+        mutate(prop = n/n_tot) %>%
+        mutate(y = cumsum(prop) - prop/2) %>%
+        mutate(lab = glue("{number(n,accuracy=1)}{sep}({percent(prop,accuracy=1)})")) %>%
+        ungroup() %>%
+        mutate(pnl = glue("{tag1} ({n_tot})"))
+    ggplot(tp) +
+        geom_bar(aes(x='',y=prop,fill=tag2), stat='identity', alpha=alph, color='white') +
+        coord_polar("y", start=0) +
+        geom_text_repel(aes(x='',y=y,label=lab),color=col1,size=2.5,lineheight=.8,nudge_x=.3) +
+        #scale_x_discrete(name=xtitle, expand=expansion(mult=expand.x)) +
+        #scale_y_continuous(name=ytitle, expand=expansion(mult=expand.y)) +
+        scale_fill_manual(name=legend.title, values=fills) +
+        facet_wrap(~pnl, ncol=ncol) +
+        otheme(legend.pos=legend.pos,legend.dir=legend.dir,strip.compact=T,
+               legend.title=legend.title,
+               legend.vjust=legend.vjust,
+               strip.compact=!!strip.compact,
+            xtick=F, ytick=F, xtitle=F, xtext=F, ytext=F, panel.border=F)
     #}}}
 }
 
@@ -385,18 +510,3 @@ heatmap_hc <- function(ti, top=2,bottom=5, text.size=2.5, ratio=3,
     #}}}
 }
 
-#' quick linear regression
-#'
-#' @export
-lg <- function(a, b, name1, name2, f_png) {
-    #{{{
-    png(filename=f_png, width=500, height=500, units='px');
-    plot(a, b, type="p", xlab=name1, ylab=name2)
-    fit = lm(b~a)
-    abline(fit, col="blue")
-    fit.sum = summary(fit)
-    ann = paste("adjusted Rsquare = ", sprintf("%.04f", fit.sum$adj.r.squared), sep="")
-    text(0.8*min(a)+0.2*max(a), 0.8*min(b)+0.2*max(b), ann, col='red')
-    dev.off();
-    #}}}
-}
