@@ -1,12 +1,12 @@
 #' read project meta table
 #'
 #' @export
-read_projects <- function(genome='Zmays_B73', diri = '~/projects/barn') {
+read_projects <- function(genome='zm', diri = '~/projects/barn') {
     #{{{
-    gdic = c('Athaliana' = 'arabidopsis', 'Osativa' = 'rice', 'Zmays_B73' = 'maize')
-    stopifnot(genome %in% names(gdic))
-    org = gdic[genome]
-    read_xlsx(glue("{diri}/{org}.xlsx"))
+    #gdic = c('Athaliana' = 'arabidopsis', 'Osativa' = 'rice', 'Zmays_B73' = 'maize')
+    #stopifnot(genome %in% names(gdic))
+    #org = gdic[genome]
+    read_xlsx(glue("{diri}/{genome}.xlsx"))
     #}}}
 }
 
@@ -70,9 +70,9 @@ rnaseq_mapping_stat <- function(yid, dird='~/projects/rnaseq/data') {
 #' read one RNA-Seq study result (raw)
 #'
 #' @export
-rnaseq_cpm_raw <- function(yid, genome='Zmays_B73', diri='~/projects/rnaseq/data/11_qc') {
+rnaseq_cpm_raw <- function(yid, diri='~/projects/s3/zhoup-nfo/archive') {
     #{{{
-    fi = sprintf("%s/%s/%s/00.raw.rds", diri, genome, yid)
+    fi = glue("{diri}/{yid}/00.raw.rds")
     cat(fi,'\n')
     stopifnot(file.exists(fi))
     readRDS(fi)
@@ -82,9 +82,9 @@ rnaseq_cpm_raw <- function(yid, genome='Zmays_B73', diri='~/projects/rnaseq/data
 #' read one RNA-Seq study result (final)
 #'
 #' @export
-rnaseq_cpm <- function(yid, diri='~/projects/rnaseq/data/11_qc', genome='Zmays_B73') {
+rnaseq_cpm <- function(yid, diri='~/projects/s3/zhoup-nfo/archive') {
     #{{{
-    fi = sprintf("%s/%s/%s/01.rds", diri, genome, yid)
+    fi = glue("{diri}/{yid}/00.raw.rds")
     stopifnot(file.exists(fi))
     readRDS(fi)
     #}}}

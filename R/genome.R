@@ -1,14 +1,14 @@
 #' Get system path to genome directory
 #'
 #' @export
-genome_dir <- function(genome='', root='~/projects/genome/data') {
+genome_dir <- function(genome='', root='~/projects/s3/zhoup-genome') {
     file.path(root, genome)
 }
 
 #' Read Chromosomze size
 #'
 #' @export
-read_chrom_size <- function(genome='Zmays_B73', dirg = '~/projects/genome/data') {
+read_chrom_size <- function(genome='Zmays_B73', dirg = '~/projects/s3/zhoup-genome') {
     #{{{
     fi = file.path(dirg, genome, '15_intervals/01.chrom.sizes')
     if(!file.exists(fi)) {
@@ -22,7 +22,7 @@ read_chrom_size <- function(genome='Zmays_B73', dirg = '~/projects/genome/data')
 #' Read Genome Configuration
 #'
 #' @export
-read_genome_conf <- function(genome='Zmays_B73', dirg = '~/projects/genome/data') {
+read_genome_conf <- function(genome='Zmays_B73', dirg = '~/projects/s3/zhoup-genome') {
     #{{{
     fi = file.path(dirg, genome, '55.rds')
     if(!file.exists(fi)) {
@@ -36,7 +36,7 @@ read_genome_conf <- function(genome='Zmays_B73', dirg = '~/projects/genome/data'
 #' laod txdb
 #'
 #' @export
-load_txdb <- function(org) loadDb(file.path('~/projects/genome/data', org, "50_annotation/10.sqlite"))
+load_txdb <- function(org) loadDb(file.path('~/projects/s3/zhoup-genome', org, "50_annotation/10.sqlite"))
 
 #' Read maize v3 to v4 gene ID mapping
 #'
