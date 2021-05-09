@@ -40,7 +40,7 @@ txdb_gene <- function(txdb, gid, gb=0) {
     #{{{
     if(is.na(gid)) return(NA)
     ti = AnnotationDbi::select(txdb, keys=gid, columns=columns(txdb), keytype='GENEID') %>%
-        rename(gid=GENEID, tid=TXNAME, chrom=TXCHROM, tb=TXSTART, te=TXEND,
+        dplyr::rename(gid=GENEID, tid=TXNAME, chrom=TXCHROM, tb=TXSTART, te=TXEND,
             srd=TXSTRAND, eb=EXONSTART, ee=EXONEND, cb=CDSSTART, ce=CDSEND)
     ti1 = ti %>% distinct(gid,tid,beg=tb,end=te,srd) %>% mutate(type='rna')
     ti2 = ti %>% filter(!is.na(ee)) %>%
@@ -55,7 +55,7 @@ txdb_gene <- function(txdb, gid, gb=0) {
 #' plot genes using tibble
 #'
 #' @export
-plot_genes <- function(tg, pb, pe, n_arrows=10, ht.exon=.2, ht.cds=.4, x=T, label.top=T) {
+plot_genes0 <- function(tg, pb, pe, n_arrows=10, ht.exon=.2, ht.cds=.4, x=T, label.top=T) {
     #{{{
     if(length(tg)==0 || is.na(tg)) {
         p = ggplot() +
@@ -113,6 +113,56 @@ plot_genes <- function(tg, pb, pe, n_arrows=10, ht.exon=.2, ht.cds=.4, x=T, labe
         p + geom_text(data=tgr,aes(x=pos,y=y+ht.cds*1.1,label=tid), vjust=0, size=2)
     } else {
         p + geom_text(data=tgr,aes(x=pos,y=y-ht.cds*1.1,label=tid), vjust=1, size=2)
+    }
+    #}}}
+}
+plot_genes <- function(tg, pb, pe, arr=.1, ht.exon=.2, ht.cds=.4, x=T, label.top=T) {
+    #{{{
+    if(length(tg)==0 || is.na(tg)) {
+        p = ggplot() +
+        otheme(panel.border=F, xtick=F,xtext=F,panel.spacing=0,margin=c(0,0,0,0))
+        return(p)
+    }
+    #{{{ prepare
+    if (! 'y' %in% colnames(tg)) {
+        tg0 = tg %>% filter(type=='rna') %>% arrange(gid) %>% mutate(y = 1:n())
+        tg = tg %>% inner_join(tg0 %>% dplyr::select(tid,y), by='tid')
+    }
+    tgr = tg %>% filter(type=='rna') %>% mutate(pos=(beg+end)/2)
+    tgx = tgr %>% mutate(size=end-beg) %>% arrange(desc(size))
+    brks = c(tgx$beg[[1]], tgx$end[[1]])
+    arrow.wd = round(diff(brks)*arr)
+    labs = c("TSS", "TTS")
+    if (tgx$srd[[1]] == '-')  labs = c("TTS", "TSS")
+    tga1 = tgr %>% filter(srd=='+') %>% mutate(xbeg=beg,xend=beg+arrow.wd)
+    tga2 = tgr %>% filter(srd=='-') %>% mutate(xbeg=end,xend=end-arrow.wd)
+    tge = tg %>% filter(type=='exon')
+    tgc = tg %>% filter(type=='cds')
+    #}}}
+    col.intron='grey'; col.exon='grey'; col.cds='grey'#''royalblue'
+    col.syn = 'grey'
+    arw = arrow(length=unit(.15,'cm'), angle=30, ends='last',type="open")
+    p = ggplot() +
+        geom_segment(data=tgr,aes(x=beg,xend=end,y=y,yend=y),col=col.intron,size=.5) +
+        geom_segment(data=tga1,aes(x=xbeg,xend=xend,y=y+ht.cds*1.1,yend=y+ht.cds*1.1),
+                     color='black', size=.5, arrow=arw) +
+        geom_segment(data=tga2,aes(x=xbeg,xend=xend,y=y+ht.cds*1.1,yend=y+ht.cds*1.1),
+                     color='black', size=.5, arrow=arw) +
+        geom_rect(data=tge,aes(xmin=beg,xmax=end,ymin=y-ht.exon,ymax=y+ht.exon),fill=col.exon,color=NA,alpha=1) +
+        geom_rect(data=tgc,aes(xmin=beg,xmax=end,ymin=y-ht.cds,ymax=y+ht.cds),fill=col.cds,color=NA,alpha=1) +
+        geom_rect(data=tgr, aes(xmin=beg-500,xmax=beg+500,ymin=-Inf,ymax=Inf), fill='yellow', alpha=.2) +
+        scale_x_continuous(label=label_number(accuracy=1),
+                           #breaks=brks, labels=labs,
+                           limits=c(pb,pe),expand=expansion(mult=c(.01,.01))) +
+        #scale_y_continuous(expand=expansion(mult=c(.01,.01))) +
+        scale_y_continuous(expand=expansion(add=c(0,.2),mult=c(0,0))) +
+        otheme(panel.border=F, xtick=x, margin=c(0,0,0,0)) +
+        theme(axis.text.x = element_text(size=6))
+    if (! x) p = p + no_x_axis()
+    if (label.top) {
+        p + geom_text(data=tgr,aes(x=pos,y=y+ht.cds*1.1,label=tid), vjust=.5, size=2)
+    } else {
+        p + geom_text(data=tgr,aes(x=pos,y=y-ht.cds*1.1,label=tid), vjust=.5, size=2)
     }
     #}}}
 }

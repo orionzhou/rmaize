@@ -85,6 +85,7 @@ rnaseq_cpm_raw <- function(yid, diri='~/projects/s3/zhoup-nfo/archive') {
 rnaseq_cpm <- function(yid, diri='~/projects/s3/zhoup-nfo/archive') {
     #{{{
     fi = glue("{diri}/{yid}/00.raw.rds")
+    fi = glue("{diri}/{yid}/01.rds")
     stopifnot(file.exists(fi))
     readRDS(fi)
     #}}}
@@ -368,7 +369,7 @@ plot_clustering_2d <- function(tp, xtitle='PC1', ytitle='PC2',
     var.lab='lab', var.col='', var.shape='', var.ellipse='',
     shapes = pal_shapes(n=10), leg.col=T, leg.shape=T,
     legend.pos='top.right', legend.dir='v', legend.box='v', legend.title=T,
-    point.size=2, lab.size=2, pal.col='aaas') {
+    point.size=2, lab.size=2, pal.col='aaas', cols=NULL) {
     #{{{
     x.max=max(tp$x)
     p = ggplot(tp, aes(x,y))
@@ -381,9 +382,13 @@ plot_clustering_2d <- function(tp, xtitle='PC1', ytitle='PC2',
     else if(var.shape != '' & var.col == '')
         p = p + geom_point(aes(shape=get(var.shape)), size=point.size) +
             scale_shape_manual(name=var.shape, values = shapes)
-    else
+    else if(is.null(cols))
         p = p + geom_point(aes(color=get(var.col), shape=get(var.shape)), size=point.size) +
             get(str_c('scale_color', pal.col, sep="_"))(name=var.col) +
+            scale_shape_manual(name=var.shape, values = shapes)
+    else
+        p = p + geom_point(aes(color=get(var.col), shape=get(var.shape)), size=point.size) +
+            scale_color_manual(name=var.col, values=cols) +
             scale_shape_manual(name=var.shape, values = shapes)
     # ellipse
     if (var.ellipse != '')

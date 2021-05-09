@@ -183,9 +183,9 @@ otheme <- function(margin = c(.5,.5,.5,.5),
         o = o + theme(axis.text.y = element_blank())
     }
     if(!xticks)
-        o = o + theme(axis.ticks.x = element_blank())
+        o = o + theme(axis.ticks.x = element_blank(), axis.ticks.length.x=unit(0,'pt'))
     if(!yticks)
-        o = o + theme(axis.ticks.y = element_blank())
+        o = o + theme(axis.ticks.y = element_blank(), axis.ticks.length.y=unit(0,'pt'))
     #}}}
     #{{{ panel & grid
     o = o + theme(panel.grid.minor = element_blank()) +
@@ -210,7 +210,7 @@ no_x_axis <- function(title=F,text=F,tick=F) {
     p = theme()
     if(!title) p = p + theme(axis.title.x=element_blank())
     if(!text) p = p + theme(axis.text.x=element_blank())
-    if(!tick) p = p + theme(axis.ticks.x=element_blank())
+    if(!tick) p = p + theme(axis.ticks.x=element_blank(), axis.ticks.length.x=unit(0, "pt"))
     p
     #}}}
 }
@@ -223,7 +223,7 @@ no_y_axis <- function(title=F,text=F,tick=F) {
     p = theme()
     if(!title) p = p + theme(axis.title.y=element_blank())
     if(!text) p = p + theme(axis.text.y=element_blank())
-    if(!tick) p = p + theme(axis.ticks.y=element_blank())
+    if(!tick) p = p + theme(axis.ticks.y=element_blank(), axis.ticks.length.y=unit(0, "pt"))
     p
     #}}}
 }
