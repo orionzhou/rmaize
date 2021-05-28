@@ -200,10 +200,10 @@ read_regions <- function(opt='umr', dirw = '~/projects/genome/data2/Zmays_B73/ch
 #' Get maize cross-reference gene table
 #'
 #' @export
-read_xref <- function(opt='synmap', dirw = '~/projects/genome/data2/Zmays_B73/gene_mapping') {
+read_xref <- function(opt='synmap', dirw = '~/projects/genome/data2/syntelog') {
     #{{{
     if(opt == 'synmap') {
-        fi = file.path(dirw, 'xref.synmap.tsv')
+        fi = file.path(dirw, 'xref.maize.tsv')
     } else if(opt == 'maizeGDB') {
         fi = file.path(dirw, 'xref.maizeGDB.tsv')
     } else {
