@@ -8,7 +8,7 @@ genome_dir <- function(genome='', root='~/projects/s3/zhoup-genome') {
 #' Read Chromosomze size
 #'
 #' @export
-read_chrom_size <- function(genome='Zmays_B73', dirg = '~/projects/s3/zhoup-genome') {
+read_chrom_size <- function(genome='Zmays_B73v5', dirg = '~/projects/s3/zhoup-genome') {
     #{{{
     fi = file.path(dirg, genome, '15_intervals/01.chrom.sizes')
     if(!file.exists(fi)) {
@@ -22,7 +22,7 @@ read_chrom_size <- function(genome='Zmays_B73', dirg = '~/projects/s3/zhoup-geno
 #' Read Genome Configuration
 #'
 #' @export
-read_genome_conf <- function(genome='Zmays_B73', dirg = '~/projects/s3/zhoup-genome') {
+read_genome_conf <- function(genome='Zmays_B73v5', dirg = '~/projects/s3/zhoup-genome') {
     #{{{
     fi = glue("{dirg}/{genome}/55.rds")
     if(!file.exists(fi)) {
@@ -200,10 +200,12 @@ read_regions <- function(opt='umr', dirw = '~/projects/genome/data2/Zmays_B73/ch
 #' Get maize cross-reference gene table
 #'
 #' @export
-read_xref <- function(opt='synmap', dirw = '~/projects/genome/data2/syntelog') {
+read_xref <- function(opt='v5', dirw = '~/projects/genome/data2/syntelog') {
     #{{{
-    if(opt == 'synmap') {
-        fi = file.path(dirw, 'xref.maize.tsv')
+    if(opt == 'v4') {
+        fi = file.path(dirw, 'xref.maize.v4.tsv')
+    } else if(opt == 'v5') {
+        fi = file.path(dirw, 'xref.maize.v5.tsv')
     } else if(opt == 'maizeGDB') {
         fi = file.path(dirw, 'xref.maizeGDB.tsv')
     } else {

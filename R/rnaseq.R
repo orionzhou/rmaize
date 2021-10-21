@@ -22,9 +22,37 @@ rnaseq_sample_meta <- function(yid='rn18g',dird='~/projects/rnaseq/data') {
     #}}}
 }
 
-#' get RNA-Seq mapping stats
+#' get mapping stats
 #'
 #' @export
+sum_mapping_stat <- function(r, opt = 'rnaseq') {
+#{{{ sumamrise mapping stats
+    if (opt == 'chipseq') {
+        ti1 = r$th %>%
+            select(grp=group,rep=Replicate,spots) %>%
+            mutate(sid = glue("{grp}.R{rep}")) %>%
+            group_by(sid) %>% summarise(total=sum(spots)) %>% ungroup()
+    } else {
+        ti1 = r$th %>% select(sid=SampleID,total=spots)
+    }
+    ti2 = r$bamstat %>%
+        separate(sid, c('sid','gt'), sep='-') %>%
+        mutate(passedQC=pair+unpair, mapped=pair_map+unpair_map,
+            mappedU=pair_map_hq+unpair_map_hq, unmap=pair_unmap+unpair_unmap) %>%
+        select(sid, passedQC, mapped, mappedU, unmap)
+    #
+    types=c('failedQC', 'unmap','multi','mappedU')
+    tb = ti1 %>% inner_join(ti2, by='sid')
+    tb1 = tb %>% select(sid, total, passedQC, mapped, mappedU) %>%
+        mutate(rate_mapped_uniq = mappedU/total) %>% print(n=30)
+    tb2 = tb %>% mutate(failedQC=total-passedQC, multi=mapped-mappedU) %>%
+        select(sid, failedQC, unmap, multi, mappedU) %>%
+        gather(type, cnt, -sid) %>%
+        mutate(type=factor(type, levels=types))
+    list(tb1, tb2)
+#}}}
+}
+
 rnaseq_mapping_stat <- function(yid, dird='~/projects/rnaseq/data') {
     #{{{ mapping stats
     th = rnaseq_sample_meta(yid) %>% select(SampleID,paired)
@@ -67,6 +95,7 @@ rnaseq_mapping_stat <- function(yid, dird='~/projects/rnaseq/data') {
     #}}}
 }
 
+
 #' read one RNA-Seq study result (raw)
 #'
 #' @export
@@ -82,10 +111,9 @@ rnaseq_cpm_raw <- function(yid, diri='~/projects/s3/zhoup-nfo/archive') {
 #' read one RNA-Seq study result (final)
 #'
 #' @export
-rnaseq_cpm <- function(yid, diri='~/projects/s3/zhoup-nfo/archive') {
+rnaseq_cpm <- function(yid, diri='~/projects/s3/zhoup-nfo') {
     #{{{
-    fi = glue("{diri}/{yid}/00.raw.rds")
-    fi = glue("{diri}/{yid}/01.rds")
+    fi = glue("{diri}/{yid}/50_final/01.rds")
     stopifnot(file.exists(fi))
     readRDS(fi)
     #}}}
@@ -287,7 +315,7 @@ plot_hclust <- function(tm, th, min.value=1, pct.exp=.5,
     p1 = p1 %<+%
         tp + geom_tiplab(aes(label=get(var.lab), color=get(var.col)), size=lab.size) +
         get(str_c('scale_color', pal.col, sep="_"))() +
-        guides(color=F)
+        guides(color='none')
     p1
     #}}}
 }
@@ -407,13 +435,13 @@ plot_clustering_2d <- function(tp, xtitle='PC1', ytitle='PC2',
                xtitle=T, ytitle=T,
                margin = c(.2,.2,.2,.2)) +
         theme(axis.ticks.length = unit(0, 'lines')) +
-        guides(fill=F)
+        guides(fill='none')
     if (!leg.col)
-        p = p + guides(color=F)
+        p = p + guides(color='none')
     else
         p = p# + guides(color=guide_legend(nrow=1, byrow=T))
     if (!leg.shape)
-        p = p + guides(shape=F)
+        p = p + guides(shape='none')
     else
         p = p# + guides(shape=guide_legend(nrow=1, byrow=T))
     p
@@ -429,7 +457,7 @@ plot_ase <- function(ta, th, min_rc=20, drc='h',
     tp = ta %>% filter(allele1 + allele2 >= min_rc) %>%
         mutate(af = allele1/(allele1 + allele2)) %>%
         inner_join(th, by='SampleID') %>%
-        mutate(lab = factor(lab, levels=rev(th$lab)))
+        mutate(lab = factor(lab, levels=rev(levels(th$lab))))
     tps = tp %>% group_by(lab) %>%
         summarise(n=n(),af_avg = mean(af), af_med=median(af)) %>%
         mutate(labn=sprintf("%s (%s)", lab, number(n, big.mark = ",", accuracy=1))) %>%
@@ -452,7 +480,7 @@ plot_ase <- function(ta, th, min_rc=20, drc='h',
         scale_y_continuous(name='% allele1',expand=expansion(mult=c(.02,.02))) +
         #coord_flip() +
         otheme(xtext=T, ytext=T, xtick=T, ytick=T, xtitle=T) +
-        guides(color=F, fill=F)
+        guides(color='none', fill='none')
     p
     #}}}
 }

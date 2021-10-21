@@ -292,11 +292,10 @@ cmp_cnt1 <- function(ti, xtitle='', ytitle='', ytext=F, xangle=0,
 #' plot proportions of a set of categories
 #
 #' @export
-cmp_proportion1 <- function(ti, xtitle='',ytitle='',ytext=F,xangle=0,
-                            margin.l=.1, ypos='left', alph=.8,
-    legend.pos='top.center.out', legend.dir='h', legend.title='', barwidth=.8,
+cmp_proportion1 <- function(ti, xangle=0, ypos='left', alph=.8, acc=1, barwidth=.8,
+    xtitle='', ytitle='', legend.title='',
     lab.size=2.5, oneline=F, expand.x=c(.02,.02), expand.y=c(.01,.04),
-    fills=pal_npg()(8)) {
+    fills=pal_npg()(8), ...) {
     #{{{
     tags1 = levels(ti$tag1)
     tags2 = levels(ti$tag2)
@@ -308,10 +307,10 @@ cmp_proportion1 <- function(ti, xtitle='',ytitle='',ytext=F,xangle=0,
         mutate(prop = n/n_tot) %>%
         mutate(y = cumsum(prop)) %>%
         mutate(y = y - prop/2) %>%
-        mutate(lab = glue("{number(n,accuracy=1)}{sep}({percent(prop,accuracy=1)})")) %>%
+        mutate(lab = glue("{number(n,accuracy=acc)}{sep}({percent(prop,accuracy=1)})")) %>%
         ungroup() %>%
         mutate(tag2 = factor(tag2, levels=tags2))
-    tpx = tp %>% group_by(tag1) %>% summarise(n=number(sum(n))) %>% ungroup()
+    tpx = tp %>% group_by(tag1) %>% summarise(n=number(sum(n), accuracy=acc)) %>% ungroup()
     if (ypos == 'right') { tagm = tpx$tag1[nrow(tpx)] }
     else { tagm = tpx$tag1[1] }
     tpy = tp %>% filter(tag1==tagm)
@@ -322,11 +321,7 @@ cmp_proportion1 <- function(ti, xtitle='',ytitle='',ytext=F,xangle=0,
         scale_x_discrete(name=xtitle, expand=expansion(mult=expand.x)) +
         scale_y_continuous(name=ytitle, breaks=tpy$y, labels=tpy$tag2, expand=expansion(mult=expand.y), position=ypos) +
         scale_fill_manual(name=legend.title, values=fills) +
-        otheme(legend.pos=legend.pos,legend.dir=legend.dir,
-               legend.title=legend.title, legend.vjust=.2,
-            xtick=T, xtitle=T, xtext=T, ytext=!!ytext, ytick=!!ytext,
-            panel.border=F,
-            margin = c(.1, .1, .1, margin.l))
+        otheme(...)
     if(xangle != 0) pp = pp + theme(axis.text.x=element_text(angle=xangle, hjust=1,vjust=1))
     pp
     #}}}
@@ -335,10 +330,10 @@ cmp_proportion1 <- function(ti, xtitle='',ytitle='',ytext=F,xangle=0,
 #' plot proportions of a set of categories
 #
 #' @export
-cmp_proportion <- function(ti, xtitle='', ytitle='', xangle=0, margin.l=.1,
-    legend.pos='top.center.out', legend.dir='h', legend.title='', barwidth=.8,
-    alph=.8, oneline=F, lab.size=2.5, strip.compact=F,
-    expand.x=c(.02,.02), expand.y=c(.01,.04), nc=5, fills = pal_npg()(8)) {
+cmp_proportion <- function(ti, xangle=0, barwidth=.8, 
+    alph=.8, oneline=F, lab.size=2.5, prop.only=F, strip.compact=F, acc=1,
+    xtitle='', ytitle='', legend.title='',
+    nc = 5, expand.x=c(.02,.02), expand.y=c('.02,.02'), fills = pal_npg()(8), ...) {
     #{{{
     tags1 = levels(ti$tag1)
     tags2 = levels(ti$tag2)
@@ -350,10 +345,14 @@ cmp_proportion <- function(ti, xtitle='', ytitle='', xangle=0, margin.l=.1,
         mutate(prop = n/n_tot) %>%
         mutate(y = cumsum(prop)) %>%
         mutate(y = y - prop/2) %>%
-        mutate(lab = glue("{number(n,accuracy=1)}{sep}({percent(prop,accuracy=1)})")) %>%
         ungroup() %>%
         mutate(tag2 = factor(tag2, levels=tags2))
-    tpx = tp %>% group_by(pnl, tag1) %>% summarise(n=number(sum(n))) %>% ungroup()
+    if (prop.only)
+        tp = tp %>% mutate(lab = glue("({percent(prop,accuracy=1)})"))
+    else
+        tp = tp %>% mutate(lab = glue("{number(n,accuracy=acc)}{sep}({percent(prop,accuracy=1)})"))
+    tpx = tp %>% group_by(pnl, tag1) %>%
+        summarise(n=number(sum(n), accuracy=acc)) %>% ungroup()
     pp = ggplot(tp) +
         geom_bar(aes(x=tag1,y=prop,fill=tag2), alpha=alph, stat='identity', position='fill', width=barwidth) +
         geom_text(aes(x=tag1,y=y,label=lab),color=col1,size=lab.size,lineheight=.8) +
@@ -361,12 +360,8 @@ cmp_proportion <- function(ti, xtitle='', ytitle='', xangle=0, margin.l=.1,
         scale_x_discrete(name=xtitle, expand=expansion(mult=expand.x)) +
         scale_y_continuous(name=ytitle, expand=expansion(mult=expand.y)) +
         scale_fill_manual(name=legend.title, values=fills) +
-        facet_wrap(~pnl, ncol=nc) +
-        otheme(legend.pos=legend.pos,legend.dir=legend.dir,
-               legend.title=legend.title, legend.vjust=-.3, panel.spacing=.2,
-               strip.compact=!!strip.compact,
-            xtick=T, xtitle=T, xtext=T, ytext=F, ytick=F,
-            margin = c(.1, .1, .1, margin.l))
+        facet_wrap(~pnl, ncol=nc, scale='free') +
+        otheme(...)
     if(xangle != 0) pp = pp + theme(axis.text.x=element_text(angle=xangle, hjust=1,vjust=1))
     pp
     #}}}

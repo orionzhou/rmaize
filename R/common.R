@@ -12,6 +12,13 @@ desc_stat <- function(x) {
     #}}}
 }
 
+#' simple t-test to mark significance
+#'
+#' @export
+ttest_signif <- function(x, y) t.test(x, y)$p.value
+map_signif <- function(p) ifelse(p<0.001, "***",
+    ifelse(p<0.01, "**", ifelse(p<0.05, '*', 'NS')))
+
 #' Modified standard deviation funciton after removing missing values
 #'
 #' @export

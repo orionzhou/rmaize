@@ -14,7 +14,7 @@ downsample <- function(ti, seed=1, colname='status') {
   n2 = tis %>% pluck('n', 2)
   ti1 = ti %>% filter(status == lev1)
   set.seed(seed)
-  ti2 = ti %>% filter(status == lev2) %>% slice(sample(n2, n1))
+  ti2 = ti %>% filter(status == lev2) %>% dplyr::slice(sample(n2, n1))
   ti1 %>% bind_rows(ti2)
   #}}}
 }
