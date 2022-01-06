@@ -117,6 +117,25 @@ flattern_gcoord <- function(ti, tz) {
 #}}}
 }
 
+#' read genotype/genome panels
+#'
+#' @export
+read_gt_panels <- function(fp = "~/projects/s3/zhoup-genome2/panels.xlsx") {
+    #{{{
+    sheets = excel_sheets(fp)
+    t_pnl = tibble(panel=sheets) %>%
+        mutate(x = pmap(list(fp, sheet=panel), read_xlsx, col_names="gt")) %>%
+        unnest(x) %>%
+        group_by(panel) %>% summarise(gts = list(gt), ngt = n()) %>% ungroup()
+    t_pnl
+    #}}}
+}
+
+#' get a genotype/genome panel
+#'
+#' @export
+get_gt_panel <- function(pnl, pnls) pnls %>% filter(panel==pnl) %>% pluck('gts', 1)
+
 #' Get maize gene symbols
 #'
 #' @export

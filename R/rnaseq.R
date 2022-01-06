@@ -526,5 +526,205 @@ plot_ril_genotype <- function(cp, th, sids_red='', gts=c('B73','Mo17','het')) {
 #}}}
 }
 
+#' DE test among trio
+#'
+#' @export
+run_de_test <- function(grp1, grp2, grph, th0, tm0) {
+    #{{{
+    require(DESeq2)
+    require(edgeR)
+    #{{{ prepare data
+    th1 = th0 %>% filter(grp %in% c(grp1, grp2, grph))
+    tm1 = tm0 %>% filter(SampleID %in% th1$SampleID)
+    vh = th1 %>% mutate(grp = factor(grp)) %>% arrange(SampleID)
+    vh.d = column_to_rownames(as.data.frame(vh), var = 'SampleID')
+    gids = tm1 %>% group_by(gid) %>% summarise(n.sam = sum(ReadCount >= 10)) %>%
+        filter(n.sam > .2 * nrow(vh)) %>% pull(gid)
+    vm = tm1 %>% filter(gid %in% gids) %>%
+        select(SampleID, gid, ReadCount)
+    x = readcount_norm(vm)
+    mean.lib.size = mean(x$tl$libSize)
+    vm = x$tm
+    vm.w = vm %>% select(SampleID, gid, ReadCount) %>% spread(SampleID, ReadCount)
+    vm.d = column_to_rownames(as.data.frame(vm.w), var = 'gid')
+    stopifnot(identical(rownames(vh.d), colnames(vm.d)))
+    #{{{ obtain mid-parent
+    hm = tm1 %>%
+        filter(gid %in% gids) %>%
+        select(SampleID, gid, nRC)
+    # prepare mid-parent
+    sids1 = th1 %>% filter(grp == grp1) %>% pull(SampleID)
+    sids2 = th1 %>% filter(grp == grp2) %>% pull(SampleID)
+    sidsh = th1 %>% filter(grp == grph) %>% pull(SampleID)
+    #if(length(sidsh)==0) sidsh = th1 %>% filter(Genotype == 'MxB') %>% pull(SampleID)
+    np1 = length(sids1); np2 = length(sids2); nh = length(sidsh)
+    cat(glue("found {np1} P1, {np2} P2 and {nh} Hybrids"), "\n")
+    if(np1 < np2) sids1 = c(sids1, sample(sids1, np2-np1, replace = T))
+    if(np1 > np2) sids2 = c(sids2, sample(sids2, np1-np2, replace = T))
+    tsi1 = tibble(p1 = sids1, p2 = sids2) %>%
+        mutate(sid = sprintf("mp%02d", 1:length(p1)))
+    tsi2 = expand.grid(sid = tsi1$sid, gid = gids) %>% as_tibble() %>%
+        mutate(sid = as.character(sid), gid = as.character(gid)) %>%
+        inner_join(tsi1, by = 'sid') %>%
+        inner_join(hm, by = c('p1'='SampleID','gid'='gid')) %>%
+        inner_join(hm, by = c('p2'='SampleID','gid'='gid')) %>%
+        transmute(SampleID = sid, gid = gid, nRC = (nRC.x+nRC.y)/2)
+    hm.w = hm %>% filter(SampleID %in% sidsh) %>%
+        bind_rows(tsi2) %>%
+        mutate(nRC = round(nRC)) %>%
+        spread(SampleID, nRC)
+    hm.d = column_to_rownames(as.data.frame(hm.w), var = 'gid')
+    #
+    grp.new = rep(c('MidParent','Hybrid'), c(nrow(tsi1),length(sidsh)))
+    hh = tibble(SampleID = c(tsi1$sid, sidsh), grp = grp.new) %>%
+        mutate(grp = factor(grp)) %>%
+        mutate(libSize = mean.lib.size, normFactor = 1) %>%
+        arrange(SampleID)
+    hh.d = column_to_rownames(as.data.frame(hh), var = 'SampleID')
+    stopifnot(identical(rownames(hh.d), colnames(hm.d)))
+    #}}}
+    #}}}
+    #{{{ DESeq2
+    dds = DESeqDataSetFromMatrix(countData=vm.d, colData=vh.d, design = ~0+grp)
+    #sizeFactors(dds) = vh$sizeFactor
+    dds = estimateSizeFactors(dds)
+    dds = estimateDispersions(dds, fitType = 'parametric')
+    disp = dispersions(dds)
+    #dds = nbinomLRT(dds, reduced = ~ 1)
+    dds = nbinomWaldTest(dds)
+    resultsNames(dds)
+    res1 = results(dds, contrast=c(-1,0,1), pAdjustMethod="fdr")
+    res2 = results(dds, contrast=c(-1,1,0), pAdjustMethod="fdr")
+    res3 = results(dds, contrast=c(0,1,-1), pAdjustMethod="fdr")
+    #res4 = results(dds, contrast=c(-.5,1,-.5), pAdjustMethod="fdr")
+    stopifnot(rownames(res1) == gids)
+    stopifnot(rownames(res2) == gids)
+    stopifnot(rownames(res3) == gids)
+    #stopifnot(rownames(res4) == gids)
+    # hvm
+    dds = DESeqDataSetFromMatrix(countData=hm.d, colData=hh.d, design = ~grp)
+    sizeFactors(dds) = rep(1, nrow(hh))
+    dds = DESeq(dds, fitType = 'parametric')
+    resultsNames(dds)
+    res5 = results(dds, contrast=c("grp","Hybrid","MidParent"), pAdjustMethod="fdr")
+    stopifnot(rownames(res5) == gids)
+    #
+    t_ds = tibble(gid = gids,
+                padj.21 = res1$padj, lfc.21 = res1$log2FoldChange,
+                padj.h1 = res2$padj, lfc.h1 = res2$log2FoldChange,
+                padj.h2 = res3$padj, lfc.h2 = res3$log2FoldChange,
+                padj.hm = res5$pvalue, lfc.hm = res5$log2FoldChange
+                ) %>%
+        replace_na(list(padj.21 = 1, padj.h1 = 1, padj.h2 = 1, padj.hm = 1))
+    to1 = tm1 %>% inner_join(th1, by='SampleID') %>%
+        group_by(grp, gid) %>% summarise(cpm=mean(CPM)) %>% ungroup() %>%
+        spread(grp, cpm) %>%
+        dplyr::rename(cpm1=eval(grp1), cpm2=eval(grp2), cpmh=eval(grph))
+    #}}}
+    if(FALSE) {
+    #{{{ edgeR
+    y = DGEList(counts = vm.d, group = vh$Genotype)
+    y = calcNormFactors(y, method = 'TMM') #RLE
+    t_nf = y$samples %>% as_tibble() %>%
+        mutate(SampleID = rownames(y$samples)) %>%
+        select(SampleID = SampleID, libSize = lib.size, normFactor = norm.factors)
+    design = model.matrix(~0 + Genotype, data = vh)
+    colnames(design) = levels(vh$Genotype)
+    #y = estimateDisp(y, design)
+    y = estimateGLMCommonDisp(y, design, verbose = T)
+    y = estimateGLMTrendedDisp(y, design)
+    y = estimateGLMTagwiseDisp(y, design)
+    fit = glmFit(y, design)
+    t_cpm_merged = cpmByGroup(y) %>% as_tibble() %>%
+        transmute(cpm.b = B73, cpm.m = Mo17, cpm.h = BxM)
+    t_cpm = cpm(y, normalized.lib.sizes = T) %>% as_tibble() %>%
+        mutate(gid = gids) %>%
+        gather(sid, cpm, -gid) %>% select(sid, gid, cpm)
+    # mb, hb, hm, fm
+    lrt1 = glmLRT(fit, contrast = c(-1, 0, 1))
+    lrt2 = glmLRT(fit, contrast = c(-1, 1, 0))
+    lrt3 = glmLRT(fit, contrast = c(0, -1, 1))
+    lrt4 = glmLRT(fit, contrast = c(-.5, -.5, 1))
+    stopifnot(identical(gids, rownames(lrt1$table)))
+    stopifnot(identical(gids, rownames(lrt2$table)))
+    stopifnot(identical(gids, rownames(lrt3$table)))
+    stopifnot(identical(gids, rownames(lrt4$table)))
+    #tags = decideTestsDGE(lrt, adjust.method = "BH", p.value = .05, lfc = 1)
+    #stopifnot(identical(gids, rownames(tags)))
+    #{{{ fm
+    y = DGEList(counts = hm.d, lib.size = hh$libSize, norm.factors = hh$normFactor)
+    design = model.matrix(~0 + Genotype, data = hh)
+    colnames(design) = unique(hh$Genotype)
+    y = estimateGLMCommonDisp(y, design, verbose = T)
+    y = estimateGLMTrendedDisp(y, design)
+    y = estimateGLMTagwiseDisp(y, design)
+    fit = glmFit(y, design)
+    lrt5 = glmLRT(fit, contrast = c(-1, 1))
+    stopifnot(identical(gids, rownames(lrt5$table)))
+    #}}}
+    tr1 = lrt1$table %>% rownames_to_column("gid") %>% as_tibble() %>% 
+        mutate(padj.mb = p.adjust(PValue, method = 'BH')) %>%
+        select(gid, log2mb = logFC, padj.mb)
+    tr2 = lrt2$table %>% 
+        mutate(padj.hb = p.adjust(PValue, method = 'BH')) %>%
+        select(log2hb = logFC, padj.hb)
+    tr3 = lrt3$table %>%
+        mutate(padj.hm = p.adjust(PValue, method = 'BH')) %>%
+        select(log2hm = logFC, padj.hm)
+    tr4 = lrt4$table %>%
+        mutate(padj.fm = p.adjust(PValue, method = 'BH')) %>%
+        select(log2fm = logFC, padj.fm)
+    tr5 = lrt5$table %>%
+        mutate(padj.fm = p.adjust(PValue, method = 'BH')) %>%
+        select(log2fm = logFC, padj.fm)
+    t_eg = tr1 %>% bind_cols(tr2) %>% bind_cols(tr3) %>% bind_cols(tr5)
+    #}}}
+    }
+    #list(deseq = t_ds, edger = '')
+    to1 %>% inner_join(t_ds, by='gid')
+    #}}}
+}
+
+#' assign dominance/additive pattern
+#'
+#' @export
+assign_add_dom <- function(t_ds) {
+    #{{{
+    doms = c("BLP", "LP", "PD_L", "MP", "PD_H", "HP", "AHP")
+    deg2tag <- function(lfc, padj, lfc.t=1, padj.t=.05) ifelse(abs(lfc)>=lfc.t & padj<padj.t, ifelse(lfc > 0, 1, -1), 0)
+    td0 = t_ds %>%
+        mutate(tag.21 = map2_dbl(lfc.21, padj.21, deg2tag)) %>%
+        mutate(tag.h1 = map2_dbl(lfc.h1, padj.h1, deg2tag)) %>%
+        mutate(tag.h2 = map2_dbl(lfc.h2, padj.h2, deg2tag))
+    td1 = td0 %>% filter(tag.21 != 0) %>%
+        mutate(padj.hm = p.adjust(padj.hm, method='BH')) %>%
+        mutate(tag.hm = map2_dbl(lfc.hm, padj.hm, deg2tag)) %>%
+        mutate(tag.lp = ifelse(tag.21==1, tag.h1, tag.h2),
+               tag.hp = ifelse(tag.21==1, tag.h2, tag.h1)) %>%
+        mutate(Dom = ifelse(tag.21, "MP", NA)) %>%
+        mutate(Dom = ifelse(tag.hm == -1 & tag.lp == -1, 'BLP', Dom)) %>%
+        mutate(Dom = ifelse(tag.hm == -1 & tag.lp == 0, 'LP', Dom)) %>%
+        mutate(Dom = ifelse(tag.hm == -1 & tag.lp == 1, 'PD_L', Dom)) %>%
+        mutate(Dom = ifelse(tag.hm == 1 & tag.hp == -1, 'PD_H', Dom)) %>%
+        mutate(Dom = ifelse(tag.hm == 1 & tag.hp == 0, 'HP', Dom)) %>%
+        mutate(Dom = ifelse(tag.hm == 1 & tag.hp == 1, 'AHP', Dom)) %>%
+        mutate(Dom = factor(Dom, levels = doms)) %>% 
+        mutate(cpm.mp = (cpm1 + cpm2)/2,
+               doa = (cpmh - cpm.mp)/(pmax(cpm1, cpm2) - cpm.mp)) %>%
+        mutate(doa = ifelse(doa < -3, -3, doa)) %>%
+        mutate(doa = ifelse(doa > 3, 3, doa)) %>%
+        select(gid, Dom = Dom, doa)
+    doms2 = c("PL",'AP','BP')
+    td2 = td0 %>% filter(tag.21 == 0) %>%
+        mutate(Dom2 = 'PL') %>%
+        mutate(Dom2 = ifelse(tag.h1==1 & tag.h2==1, 'AP', Dom2)) %>%
+        mutate(Dom2 = ifelse(tag.h1==-1 & tag.h2==-1, 'BP', Dom2)) %>%
+        mutate(Dom2 = factor(Dom2, levels=doms2)) %>%
+        select(gid, Dom2)
+    td = td0 %>% select(gid, cpm1, cpm2, cpmh, pDE=tag.21) %>%
+        left_join(td1, by='gid') %>% left_join(td2, by='gid')
+    td
+    #}}}
+}
 
 

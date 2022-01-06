@@ -98,7 +98,7 @@ otheme <- function(margin = c(.5,.5,.5,.5),
                    legend.title = F, legend.border = F,
                    legend.spacing.x = 0, legend.spacing.y = 0,
                    panel.border = T, panel.spacing = .02,
-                   xticks = F, yticks = F, xtitle = F, ytitle = F,
+                   axis = F, xticks = F, yticks = F, xtitle = F, ytitle = F,
                    xtext = F, ytext = F, xgrid = F, ygrid = F,
                    xsize = 8, ysize = 8, nostrip = T) {
     #{{{ custom theme
@@ -161,7 +161,8 @@ otheme <- function(margin = c(.5,.5,.5,.5),
     if(legend.border == T)
         o = o + theme(legend.box.background = element_rect())
     #}}}
-    #{{{ axis tick/text/title
+    #{{{ axis line/tick/text/title
+    if(axis) o = o + theme(axis.line = element_line(size=.3, arrow = grid::arrow(length = unit(.2,"cm"), type='open', angle=20)))
     if(xtitle) {
         o = o + theme(axis.title.x = element_text(size = 9))
     } else {
@@ -247,7 +248,7 @@ plot_hist <- function(x, fo='~/tmp.pdf', xlab='xlab', ylab='count') {
     #}}}
 }
 
-#' plot proportions of a set of categories
+#' plot count of a set of categories
 #
 #' @export
 cmp_cnt1 <- function(ti, xtitle='', ytitle='', ytext=F, xangle=0,
@@ -284,6 +285,46 @@ cmp_cnt1 <- function(ti, xtitle='', ytitle='', ytext=F, xangle=0,
                legend.title=legend.title, legend.vjust=.2,
             xtick=T, ytick=!!ytext, xtitle=T, xtext=T, ytext=!!ytext, panel.border=F,
             margin = c(.1, .1, .1, margin.l))
+    if(xangle != 0) pp = pp + theme(axis.text.x=element_text(angle=xangle, hjust=1,vjust=1))
+    pp
+    #}}}
+}
+
+#' plot count of a set of categories
+#
+#' @export
+cmp_cnt_grid <- function(ti, xangle=0, barwidth=.8, 
+    alph=.8, oneline=F, lab.size=2.5, prop.only=F, acc=1,
+    xtitle='', ytitle='', legend.title='',
+    nc = 5, expand.x=c(.02,.02), expand.y=c('.02,.02'), fills = pal_npg()(8), ...) {
+    #{{{
+    tags1 = levels(ti$tag1)
+    tags2 = levels(ti$tag2)
+    sep = ifelse(oneline, " ", "\n")
+    col1 = 'black'; col2 = 'black'
+    tp = ti %>%
+        arrange(tag1, desc(tag2)) %>%
+        group_by(pnl1, pnl2, tag1) %>% mutate(n_tot = sum(n)) %>%
+        mutate(prop = n/n_tot) %>%
+        mutate(y = cumsum(n)) %>%
+        mutate(y = y - n/2) %>%
+        ungroup() %>%
+        mutate(tag2 = factor(tag2, levels=tags2))
+    if (prop.only)
+        tp = tp %>% mutate(lab = glue("({percent(prop,accuracy=1)})"))
+    else
+        tp = tp %>% mutate(lab = glue("{number(n,accuracy=acc)}{sep}({percent(prop,accuracy=1)})"))
+    tpx = tp %>% group_by(pnl1, pnl2, tag1) %>%
+        summarise(total = sum(n), lab=number(total, accuracy=acc)) %>% ungroup()
+    pp = ggplot(tp) +
+        geom_bar(aes(x=tag1,y=n,fill=tag2), alpha=alph, stat='identity', position='stack', width=barwidth) +
+        geom_text(aes(x=tag1,y=y,label=lab),color=col1,size=lab.size,lineheight=.8) +
+        geom_text(data=tpx, aes(tag1,total*1.01,label=lab), color=col2,size=lab.size+.5, vjust=0) +
+        scale_x_discrete(name=xtitle, expand=expansion(mult=expand.x)) +
+        scale_y_continuous(name=ytitle, expand=expansion(mult=expand.y)) +
+        scale_fill_manual(name=legend.title, values=fills) +
+        facet_grid(pnl2~pnl1, scale='free_x') +
+        otheme(...)
     if(xangle != 0) pp = pp + theme(axis.text.x=element_text(angle=xangle, hjust=1,vjust=1))
     pp
     #}}}
@@ -331,7 +372,7 @@ cmp_proportion1 <- function(ti, xangle=0, ypos='left', alph=.8, acc=1, barwidth=
 #
 #' @export
 cmp_proportion <- function(ti, xangle=0, barwidth=.8, 
-    alph=.8, oneline=F, lab.size=2.5, prop.only=F, strip.compact=F, acc=1,
+    alph=.8, oneline=F, lab.size=2.5, prop.only=F, acc=1,
     xtitle='', ytitle='', legend.title='',
     nc = 5, expand.x=c(.02,.02), expand.y=c('.02,.02'), fills = pal_npg()(8), ...) {
     #{{{
